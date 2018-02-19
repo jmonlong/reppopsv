@@ -143,13 +143,13 @@ table.omim %>% kable
 
 | set                        |  nb.cnvs|  nb.exons|  nb.exprom|  nb.geneprom|
 |:---------------------------|--------:|---------:|----------:|------------:|
-| All CNVs                   |    91735|      1307|       1955|         2306|
-| CNV-Extremely low coverage |     9348|        11|         14|           26|
-| CNV-Low coverage           |    32707|        98|        167|          387|
+| All CNVs                   |    91735|      1241|       1857|         2196|
+| CNV-Extremely low coverage |     9348|        11|         14|           25|
+| CNV-Low coverage           |    32707|        95|        160|          371|
 | CNV-Satellite              |     1822|         0|          0|            0|
-| CNV-STR                    |     4285|         5|         40|          131|
-| CNV-STR/Sat/TE             |    22313|        29|        241|          701|
-| CNV-TE                     |    20491|        29|        241|          701|
+| CNV-STR                    |     4285|         5|         39|          129|
+| CNV-STR/Sat/TE             |    22313|        29|        233|          664|
+| CNV-TE                     |    20491|        29|        233|          664|
 
 ### Novel CNVs
 
@@ -188,13 +188,13 @@ table.novel.omim %>% kable
 
 | set                        |  nb.cnvs|  nb.exons|  nb.exprom|  nb.geneprom|
 |:---------------------------|--------:|---------:|----------:|------------:|
-| All CNVs                   |    17046|        39|         60|          141|
+| All CNVs                   |    17046|        38|         59|          135|
 | CNV-Extremely low coverage |     6591|         5|          6|            8|
-| CNV-Low coverage           |    15263|        29|         48|          116|
+| CNV-Low coverage           |    15263|        29|         47|          111|
 | CNV-Satellite              |      890|         0|          0|            0|
-| CNV-STR                    |     1806|         0|          9|           42|
-| CNV-STR/Sat/TE             |     4786|         1|         12|           69|
-| CNV-TE                     |     3896|         1|         12|           69|
+| CNV-STR                    |     1806|         0|          9|           41|
+| CNV-STR/Sat/TE             |     4786|         1|         12|           66|
+| CNV-TE                     |     3896|         1|         12|           66|
 
 Saturation curves
 -----------------

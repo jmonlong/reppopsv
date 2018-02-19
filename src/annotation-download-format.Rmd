@@ -96,7 +96,7 @@ centelgap %>% as.data.frame %>% head %>% kable
 
 ## Simple repeats
 
-```{r simprep}
+```{r simprep, cache=TRUE}
 simprep = read.table('../data/simpleRepeat.txt.gz', as.is=TRUE, sep="\t")
 simprep = simprep[,c(2:4, 17)]
 colnames(simprep) = c("chr","start","end", 'sequence')
@@ -153,15 +153,13 @@ sv.chaisson %>% sample_n(6) %>% kable(row.names=FALSE)
 
 ```{r omim, cache=TRUE}
 library(biomaRt)
-omim.marts = listMarts()
-omim.marts
-ensembl=useMart("ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
+ensembl=useMart("ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", host='Aug2017.archive.ensembl.org')
 omim = getBM(attributes=c('hgnc_symbol', 'mim_morbid_description'), mart=ensembl)
 mergeDiseaseDesc <- function(desc){
   desc %>% gsub(';;',';', .) %>% strsplit(';') %>% unlist %>% unique %>% paste(collapse=';')
 }
 omim %<>% filter(mim_morbid_description != '') %>% group_by(hgnc_symbol) %>% summarize(mim_morbid_description=mergeDiseaseDesc(mim_morbid_description))
-save(omim, omim.marts, file='../data/omim-genes.RData')
+save(omim, file='../data/omim-genes.RData')
 ```
 
 There are `r nrow(omim)` OMIM genes.

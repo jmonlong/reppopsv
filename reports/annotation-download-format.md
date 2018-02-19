@@ -251,18 +251,8 @@ OMIM disease genes
 
 ``` r
 library(biomaRt)
-omim.marts = listMarts()
-omim.marts
-```
-
-    ##                biomart               version
-    ## 1 ENSEMBL_MART_ENSEMBL      Ensembl Genes 91
-    ## 2   ENSEMBL_MART_MOUSE      Mouse strains 91
-    ## 3     ENSEMBL_MART_SNP  Ensembl Variation 91
-    ## 4 ENSEMBL_MART_FUNCGEN Ensembl Regulation 91
-
-``` r
-ensembl = useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl")
+ensembl = useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl", 
+    host = "Aug2017.archive.ensembl.org")
 omim = getBM(attributes = c("hgnc_symbol", "mim_morbid_description"), mart = ensembl)
 mergeDiseaseDesc <- function(desc) {
     desc %>% gsub(";;", ";", .) %>% strsplit(";") %>% unlist %>% unique %>% 
@@ -270,7 +260,7 @@ mergeDiseaseDesc <- function(desc) {
 }
 omim %<>% filter(mim_morbid_description != "") %>% group_by(hgnc_symbol) %>% 
     summarize(mim_morbid_description = mergeDiseaseDesc(mim_morbid_description))
-save(omim, omim.marts, file = "../data/omim-genes.RData")
+save(omim, file = "../data/omim-genes.RData")
 ```
 
-There are 3595 OMIM genes.
+There are 3438 OMIM genes.
