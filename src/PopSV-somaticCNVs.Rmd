@@ -1,0 +1,71 @@
+---
+title: Somatic CNVs
+author: Jean Monlong
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=10, tidy=TRUE)
+```
+
+# Somatic CNVs
+
+## Load packages, functions and data
+
+```{r libfun}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(GenomicRanges)
+library(knitr)
+
+winsor <- function(x, u=NULL, l=NULL){
+  if(!is.null(u) & any(x>u)) x[x>u] = u
+  if(!is.null(l) & any(x<l)) x[x<l] = l
+  x
+}
+olProp <- function(qgr, sgr){
+  sgr = reduce(sgr)
+  ol = findOverlaps(qgr, sgr) %>% as.data.frame %>% mutate(qw=width(qgr)[queryHits], qsw=width(pintersect(qgr[queryHits], sgr[subjectHits]))) %>% group_by(queryHits) %>% summarize(prop=sum(qsw/qw))
+  res = rep(0, length(qgr))
+  res[ol$queryHits] = ol$prop
+  res
+}
+```
+
+## CNVs in normal and tumors samples
+
+```{r cnvs}
+load('../data/cnvs-cagekid-FDR001.RData')
+cnv.df %>% head %>% select(sample, chr, start, end, fc, qv, status, individual) %>% kable
+```
+
+
+## Annotate tumor with germline calls
+
+```{r annot}
+annotTumor <- function(df){
+  t.df = subset(df, status=="tumor")
+  n.gr = df %>% filter(status!="tumor") %>% makeGRangesFromDataFrame
+  t.df$prop.n = t.df %>% makeGRangesFromDataFrame %>% olProp(n.gr)
+  t.df
+}
+
+tum.df = cnv.df %>% group_by(individual) %>% do(annotTumor(.))
+
+ggplot(tum.df, aes(x=prop.n)) + geom_histogram() + theme_bw() + xlab("proportion overlapping germline variants") + ylab("number of tumoral variants") + geom_vline(xintercept=.1, linetype=2)
+```
+
+CNV in tumor either overlap completely germline CNV or doesn't at all.
+
+## Somatic CNVs
+
+A tumor call is defined as somatic if less than 10% of the call overlaps calls in the paired normal.
+
+```{r somatic, eval=FALSE}
+som.df = tum.df %>% filter(prop.n < .1) %>% ungroup %>% select(sample, chr, start, end, fc, qv, cn2.dev) %>% mutate(qv=signif(qv,3), cn=round(fc*2,3), fc=round(fc,3), cn2.dev=round(cn2.dev,3))
+write.table(som.df, file="CNV-PopSV-CageKid-somatic.tsv", sep="\t",quote=FALSE, row.names=FALSE)
+```
+

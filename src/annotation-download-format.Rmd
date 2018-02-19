@@ -1,0 +1,167 @@
+---
+title: Download and format public annotations
+author: Jean Monlong
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=10, tidy=TRUE)
+```
+
+# Download and format public annotations
+
+## Load packages, functions and data
+
+```{r library}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(tidyr)
+library(data.table)
+library(GenomicRanges)
+library(rtracklayer)
+library(VariantAnnotation)
+library(knitr)
+```
+
+## Download the data
+
+```{r download}
+files.todownload = c('rmsk.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/rmsk.txt.gz',
+                     'gencode.v19.annotation.gtf.gz', 'ftp://ftp.sanger.ac.uk/pub/gencode/Gencode_human/release_19/gencode.v19.annotation.gtf.gz', 
+                     'cytoBandIdeo.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/cytoBandIdeo.txt.gz', 
+                     'gap.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/gap.txt.gz', 
+                     'simpleRepeat.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/simpleRepeat.txt.gz',
+                     'genomicSuperDups.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/genomicSuperDups.txt.gz', 
+                     'ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/integrated_sv_map/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 
+                     'chaisson_STR_expansions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/STR_expansions.bed', 
+                     'chaisson_insertions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/insertions.bed', 
+                     'chaisson_inversions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/inversions.bed', 
+                     'chaisson_deletions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/deletions.bed'
+                     )
+files.todownload %<>% matrix(ncol=2, byrow=TRUE) %>% as.data.frame(stringsAsFactors=FALSE)
+colnames(files.todownload) = c('out.filename', 'url')
+kable(files.todownload)
+
+## Download if not there
+temp = lapply(1:nrow(files.todownload), function(ii){
+  if(!file.exists(paste0('../data/',files.todownload$out.filename[ii]))){
+    download.file(files.todownload$url[ii], paste0('../data/',files.todownload$out.filename[ii]))
+  }
+})
+```
+
+## Repeat masker
+
+```{r rm, cache=TRUE}
+rm = read.table('../data/rmsk.txt.gz', colClasses=c(rep('NULL', 5), 'character', 'integer', 'integer', 'NULL', 'NULL', rep('character', 3)))
+colnames(rm) = c("chr","start","end","repName","repClass","repFamily")
+rm %<>% mutate(chr=gsub("chr","",chr)) %>% filter(chr %in% 1:22) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+save(rm, file="../data/rm.RData")
+rm %>% as.data.frame %>% head %>% kable
+```
+
+## Gencode v19
+
+```{r gencode, cache=TRUE}
+gc.gtf= import('../data/gencode.v19.annotation.gtf.gz', 'GTF')
+seqlevels(gc.gtf) = gsub('chr','',seqlevels(gc.gtf))
+gc.gtf = subset(gc.gtf, gene_type=='protein_coding')
+mcols(gc.gtf) = mcols(gc.gtf)[,c('type','gene_name', 'gene_id')]
+genes = subset(gc.gtf, type=='gene')
+exons = subset(gc.gtf, type=='exon')
+save(genes, exons, file="../data/gencodev19-proteincoding-genes-exons.RData")
+genes %>% as.data.frame %>% head %>% kable
+exons %>% as.data.frame %>% head %>% kable
+```
+
+## Centromere, telomere, gap annotation
+
+```{r centel}
+chr.band = read.table('../data/cytoBandIdeo.txt.gz', sep="\t", as.is=TRUE)
+colnames(chr.band) = c("chr","start","end", "band", "type")
+centelgap = read.table('../data/gap.txt.gz',sep="\t", as.is=TRUE)
+centelgap = centelgap[,c(2:4,8)]
+colnames(centelgap) = c("chr","start","end","type")
+## Adding telomeres as 10kbp from each chromosomal end
+centelgap = rbind(centelgap, chr.band %>% group_by(chr) %>% summarize(start=min(start),end=1e4) %>% mutate(type="telomere"))
+centelgap = rbind(centelgap, chr.band %>% group_by(chr) %>% summarize(start=max(end)-1e4,end=max(end)) %>% mutate(type="telomere"))
+##
+centelgap %<>% mutate(chr=gsub("chr","",chr)) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+save(centelgap, file="../data/centelgap.RData")
+centelgap %>% as.data.frame %>% head %>% kable
+```
+
+## Simple repeats
+
+```{r simprep}
+simprep = read.table('../data/simpleRepeat.txt.gz', as.is=TRUE, sep="\t")
+simprep = simprep[,c(2:4, 17)]
+colnames(simprep) = c("chr","start","end", 'sequence')
+simprep %<>% mutate(chr=gsub("chr","",chr)) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+save(simprep, file="../data/simprep.RData")
+simprep %>% as.data.frame %>% head %>% kable
+```
+
+## Segmental Duplications
+
+```{r segdup}
+segdup = read.table('../data/genomicSuperDups.txt.gz',sep="\t")
+segdup = segdup[,c(2:4,27)]
+colnames(segdup) = c("chr","start","end","fracMatch")
+segdup %<>% mutate(chr=gsub("chr","",chr)) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+save(segdup, file="../data/segdup.RData")
+segdup %>% as.data.frame %>% head %>% kable
+```
+
+## 1000 Genomes Project - CNV catalog
+
+```{r tkgp, cache=TRUE}
+tgp = readVcf('../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'hg19')
+tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type=SVTYPE, end=END) %>% dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% dplyr::select(seqnames, start), geno(tgp)$GT %>% as.data.frame)
+rownames(tgp.df) = NULL
+nb.samps = ncol(geno(tgp)$GT)
+tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% gather(sample, geno, 5:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0', seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+tgp = makeGRangesFromDataFrame(tgp.df, keep.extra.columns=TRUE)
+save(tgp, file='../data/tgp-CNV-noX.RData')
+tgp %>% as.data.frame %>% head %>% mutate(geno=gsub('\\|', '\\/', geno)) %>% kable
+```
+	
+The catalog is reformatted to have one row per sample/variant.
+We save the coordinates and SV type information.
+
+To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*.
+To compare with PopSV we also removed variants smaller than 300bp, in chromosome X, or affecting more than 80% of the samples.
+
+## PacBio (Chaisson et al) SV catalog
+
+```{r chaisson}
+sv.chaisson = rbind(
+    read.table('../data/chaisson_STR_expansions.bed', as.is=TRUE) %>% mutate(type='str'),
+    read.table('../data/chaisson_inversions.bed', as.is=TRUE) %>% mutate(type='inversion'),
+    read.table('../data/chaisson_deletions.bed', as.is=TRUE, fill=TRUE, sep='\t', flush=TRUE) %>% dplyr::select(V1, V2, V3) %>% mutate(type='deletion'),
+    read.table('../data/chaisson_insertions.bed', as.is=TRUE, fill=TRUE) %>% dplyr::select(V1, V2, V3) %>% mutate(type='insertion'))
+colnames(sv.chaisson)[1:3] = c('chr', 'start', 'end')
+sv.chaisson$chr %<>% gsub('chr','',.)
+save(sv.chaisson, file='../data/sv.chaisson.RData')    
+sv.chaisson %>% sample_n(6) %>% kable(row.names=FALSE)
+```
+
+## OMIM disease genes
+
+```{r omim, cache=TRUE}
+library(biomaRt)
+omim.marts = listMarts()
+omim.marts
+ensembl=useMart("ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl")
+omim = getBM(attributes=c('hgnc_symbol', 'mim_morbid_description'), mart=ensembl)
+mergeDiseaseDesc <- function(desc){
+  desc %>% gsub(';;',';', .) %>% strsplit(';') %>% unlist %>% unique %>% paste(collapse=';')
+}
+omim %<>% filter(mim_morbid_description != '') %>% group_by(hgnc_symbol) %>% summarize(mim_morbid_description=mergeDiseaseDesc(mim_morbid_description))
+save(omim, omim.marts, file='../data/omim-genes.RData')
+```
+
+There are `r nrow(omim)` OMIM genes.

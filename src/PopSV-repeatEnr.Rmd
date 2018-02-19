@@ -1,0 +1,349 @@
+---
+title: CNV enrichment in low-mappability regions
+author: Jean Monlong
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=10, tidy=TRUE)
+```
+
+# CNV enrichment in low-mappability regions
+
+## Load packages and functions
+
+```{r libfun}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(tidyr)
+library(GenomicRanges)
+library(knitr)
+library(PopSV)
+library(broom)
+
+winsor <- function(x, u=NULL, l=NULL){
+  if(!is.null(u) & any(x>u)) x[x>u] = u
+  if(!is.null(l) & any(x<l)) x[x<l] = l
+  x
+}
+olProp <- function(qgr, sgr){
+  sgr = reduce(sgr)
+  ol = findOverlaps(qgr, sgr) %>% as.data.frame %>% mutate(qw=width(qgr)[queryHits], qsw=width(pintersect(qgr[queryHits], sgr[subjectHits]))) %>% group_by(queryHits) %>% summarize(prop=sum(qsw/qw))
+  res = rep(0, length(qgr))
+  res[ol$queryHits] = ol$prop
+  res
+}
+olLoc <- function(qgr, sgr){
+  sgr = reduce(sgr)
+  qgr.center = resize(qgr, width(qgr)*.5, fix="center")
+  center.ol = overlapsAny(qgr.center, sgr)
+  qgr.flank1 = GenomicRanges::shift(flank(qgr, width(qgr)*.25), width(qgr)*.25)
+  qgr.flank2 = GenomicRanges::shift(flank(qgr, width(qgr)*.25, start=FALSE), -width(qgr)*.25)
+  flank.ol = overlapsAny(qgr.flank1, sgr) | overlapsAny(qgr.flank2, sgr)
+  out = rep("none",length(qgr))
+  out[which(center.ol)] = "center"
+  out[which(flank.ol)] = "flank"
+  out[which(flank.ol & center.ol)] = "center-flank"
+  out
+}
+NB.CORES = 3
+```
+
+## CNV catalog
+
+```{r cnv}
+cnv.germ = read.table('../data/CNV-PopSV-Twin_CageKid_GoNL-germline.tsv', as.is=TRUE, header=TRUE)
+cnv.germ %<>% mutate(project=ifelse(grepl('gonl', sample), 'GoNL', 'Twins'), project=ifelse(grepl('ck', sample), 'CageKid', project), type=ifelse(cn<2, 'DEL', 'DUP'), germline=TRUE)
+germ.samps = unique(cnv.germ$sample)
+som.df = read.table('../data/CNV-PopSV-CageKid-somatic.tsv', as.is=TRUE, header=TRUE)
+som.df %<>% mutate(project='CK somatic', type=ifelse(cn<2, 'DEL', 'DUP'), germline=FALSE)
+cnv.df = rbind(cnv.germ, som.df)
+projects.df = cnv.df %>% select(sample, project, germline) %>% unique %>% mutate(project=factor(project, levels=c('Twins', 'CageKid', 'GoNL', 'CK somatic')))
+subsamps = projects.df %>% group_by(project) %>% filter(sample %in% sample(sample, 45)) %>% .$sample
+projects.df %<>% filter(sample %in% subsamps)
+cnv.df %<>% filter(sample %in% subsamps)
+cnv.germ %<>% filter(sample %in% subsamps)
+```
+
+## Distance to centromere/telomere/gap
+
+```{r centel}
+load('../data/centelgap.RData')
+rand.gr = draw.controls(cnv.df, list(centel=centelgap), redo.duplicates=TRUE, nb.cores=NB.CORES)
+dc.df = rbind(
+    cnv.df %>% makeGRangesFromDataFrame %>% distanceToNearest(centelgap) %>% as.data.frame %>% mutate(region='CNV', sample=cnv.df$sample[queryHits]),
+        distanceToNearest(rand.gr, centelgap) %>% as.data.frame %>% mutate(region='expected', sample=rand.gr$sample[queryHits]))
+dc.df = merge(dc.df, projects.df)
+```
+
+```{r centelgraph}
+dc.df %>% filter(germline) %>% ggplot(aes(x=distance, colour=region)) + stat_ecdf() + theme_bw() + xlab("distance to centromere/telomere/gap (bp)") + ylab("cumulative proportion") + theme(legend.position=c(1,0),legend.justification=c(1,0))
+dc.df %>% filter(germline) %>% ggplot(aes(x=winsor(distance, 1e7), colour=region)) + stat_ecdf() + theme_bw() + xlab("distance to centromere/telomere/gap (bp)") + ylab("cumulative proportion") + theme(legend.position=c(1,0),legend.justification=c(1,0))
+dc.df %>% filter(germline) %>% ggplot(aes(x=distance, colour=region)) + stat_ecdf() + theme_bw() + xlab("distance to centromere/telomere/gap (bp)") + ylab("cumulative proportion") + theme(legend.position=c(1,0),legend.justification=c(1,0)) + scale_x_log10()
+
+ggplot(dc.df, aes(x=distance, colour=region)) + stat_ecdf() + theme_bw() + xlab("distance to centromere/telomere/gap (bp)") + ylab("cumulative proportion") + theme(legend.position=c(1,0),legend.justification=c(1,0)) + facet_wrap(~project)
+
+dc.df %>% group_by(region, project) %>% summarize(centelgap.1Mb=mean(distance<1e6)) %>% arrange(project, region) %>% kable(digits=3)
+```
+
+## Low-mappability and repeat classes
+
+### Controlling for the distance to centromere/telomere/gap
+
+By using controls with similar distribution
+
+```{r centelctrl}
+null.centelD.grl = list(centel=centelgap,
+                        centel.flank=reduce(c(flank(centelgap, 5e5),flank(centelgap,5e5, start=FALSE))),
+                        centel.flank2=reduce(c(flank(centelgap, 3e6),flank(centelgap,3e6, start=FALSE))))
+rand.centelD.gr = draw.controls(cnv.df, null.centelD.grl, redo.duplicates=TRUE, nb.cores=NB.CORES)
+
+dcc.df = rbind(
+    dc.df %>% filter(germline) %>% select(-project, -germline),
+    distanceToNearest(subset(rand.centelD.gr, sample %in% germ.samps), centelgap) %>% as.data.frame %>% mutate(region='centel-ctrl expected', sample=rand.centelD.gr$sample[queryHits]))
+
+ggplot(dcc.df, aes(x=distance, colour=region)) + stat_ecdf() + theme_bw() + xlab("distance to centromere/telomere/gap (bp)") + ylab("cumulative proportion") + theme(legend.position=c(1,0),legend.justification=c(1,0))
+```
+
+### Mappability, gene and repeat annotation
+
+```{r covrepannot}
+load('../data/twins-coverage-tracks-5kbp.RData')
+covrepclass.grl = ns.df %>% makeGRangesFromDataFrame %>% split(ns.df$cov.class) %>% as.list
+load('../data/gencodev19-proteincoding-genes-exons.RData')
+covrepclass.grl$gene = genes
+covrepclass.grl$exon = exons
+load('../data/segdup.RData')
+covrepclass.grl$segdup = segdup
+load('../data/simprep.RData')
+covrepclass.grl$str = simprep
+load('../data/rm.RData')
+sat.gr = subset(rm, repClass=='Satellite')
+te.gr = subset(rm, repClass %in% c('LINE', 'SINE', 'DNA', 'Other', 'LTR'))
+covrepclass.grl$sat = sat.gr
+covrepclass.grl$te = te.gr
+```
+
+### Enrichment
+
+```{r covrepenr}
+regionChar <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
+  reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
+  rcF <- function(gf.n,reg.gr, null.gr){
+    rc.df = rbind(data.frame(set="CNV", sample=reg.gr$sample, ol=overlapsAny(reg.gr, genfeat.grl[[gf.n]])),
+                  data.frame(set="control", sample=null.gr$sample, ol=overlapsAny(null.gr, genfeat.grl[[gf.n]])))
+    fc.df = rc.df %>% group_by(set, sample) %>% summarize(prop=(sum(ol)+1)/(1+n())) %>% mutate(feature=gf.n) %>% spread(set, prop) %>% mutate(prop.ratio=CNV/control) %>% as.data.frame
+    lr.df = rc.df %>% group_by(sample) %>% mutate(cnv=set=='CNV') %>% do(glm(ol~cnv, data=., family=binomial()) %>% tidy)
+    lr.df %>% filter(term=='cnvTRUE') %>% select(sample, estimate, p.value) %>% merge(fc.df)
+  }  
+  rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores=nb.cores)
+  rc.enr = do.call(rbind, rc.enr)
+}
+
+covclass.enr = regionChar(cnv.df, covrepclass.grl, rand.centelD.gr, nb.cores=NB.CORES)
+covclass.enr = merge(covclass.enr, projects.df)
+covclass.enr.s = covclass.enr %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE))
+```
+
+```{r covrepenrgraph}
+prop.est.max = max(covclass.enr.s$estimate)*1.5
+ggplot(covclass.enr, aes(x=feature, fill=project, y=winsor(estimate, prop.est.max))) + ggplot2::geom_bar(colour="black", stat="identity", position="dodge", data=covclass.enr.s) + geom_boxplot(alpha=.4, position=position_dodge(.9)) + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)")
+prop.ratio.max = max(covclass.enr.s$prop.ratio)*1.5
+ggplot(covclass.enr, aes(x=feature, fill=project, y=winsor(prop.ratio,prop.ratio.max))) + ggplot2::geom_bar(colour="black", stat="identity", position="dodge", data=covclass.enr.s) + geom_boxplot(alpha=.4, position=position_dodge(.9)) + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+covclass.enr.s %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+## Controlling for the SD enrichment
+
+```{r sdctrl}
+null.sd.grl = list(
+    segdup=segdup,
+    centel=centelgap,
+    centel.flank=reduce(c(flank(centelgap, 5e5),flank(centelgap,5e5, start=FALSE))),
+    centel.flank2=reduce(c(flank(centelgap, 3e6),flank(centelgap,3e6, start=FALSE))))
+rand.sd.gr = draw.controls(cnv.df, null.sd.grl, redo.duplicates=TRUE, nb.cores=NB.CORES)
+rand.sd.germ.gr = subset(rand.sd.gr, sample %in% germ.samps)
+```
+
+```{r nosdenr}
+regionCharNoSD <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
+  reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
+  rcF <- function(gf.n,reg.gr, null.gr){
+    rc.df = rbind(data.frame(set="CNV", sample=reg.gr$sample, ol=overlapsAny(reg.gr, genfeat.grl[[gf.n]]), sd=overlapsAny(reg.gr, segdup)),
+                  data.frame(set="control", sample=null.gr$sample, ol=overlapsAny(null.gr, genfeat.grl[[gf.n]]), sd=overlapsAny(reg.gr, segdup)))
+    fc.df = rc.df %>% group_by(set, sample) %>% summarize(prop=(sum(ol)+1)/(1+n())) %>% mutate(feature=gf.n) %>% spread(set, prop) %>% mutate(prop.ratio=CNV/control) %>% as.data.frame
+    lr.df = rc.df %>% group_by(sample) %>% mutate(cnv=set=='CNV') %>% do(glm(ol~cnv+sd, data=., family=binomial()) %>% tidy)
+    lr.df %>% filter(term=='cnvTRUE') %>% select(sample, estimate, p.value) %>% merge(fc.df)
+  }  
+  rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores=nb.cores)
+  rc.enr = do.call(rbind, rc.enr)
+}
+
+covclass.enr.nosd = regionCharNoSD(cnv.df, covrepclass.grl, rand.sd.gr, nb.cores=NB.CORES)
+covclass.enr.nosd = merge(covclass.enr.nosd, projects.df)
+covclass.enr.nosd.s = covclass.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE))
+```
+
+```{r, nosdenrgraph}
+prop.est.max = max(covclass.enr.nosd.s$estimate)*1.5
+ggplot(covclass.enr.nosd, aes(x=feature, fill=project, y=winsor(estimate, prop.est.max))) + ggplot2::geom_bar(colour="black", stat="identity", position="dodge", data=covclass.enr.nosd.s) + geom_boxplot(alpha=.4, position=position_dodge(.9)) + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)")
+prop.ratio.max = max(covclass.enr.nosd.s$prop.ratio)*1.5
+ggplot(covclass.enr.nosd, aes(x=feature, fill=project, y=winsor(prop.ratio,prop.ratio.max))) + ggplot2::geom_bar(colour="black", stat="identity", position="dodge", data=covclass.enr.nosd.s) + geom_boxplot(alpha=.4, position=position_dodge(.9)) + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+covclass.enr.nosd.s %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+## Satellite families
+
+### Enrichment
+
+```{r sat}
+sat.grl = split(sat.gr, sat.gr$repName)
+sat.enr.nosd = regionCharNoSD(cnv.df, sat.grl, rand.sd.gr, nb.cores=NB.CORES)
+sat.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
+```
+
+```{r satgraph}
+sat.enr.nosd.s = sat.enr.nosd %>% filter(germline) %>% group_by(feature) %>% filter(any(qv<.05)) %>% select(feature) %>% unique
+sat.enr.nosd %>% filter(feature %in% sat.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
+sat.enr.nosd %>% filter(feature %in% sat.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(ratio=median(prop.ratio, na.rm=TRUE), ratio5=quantile(prop.ratio, .05, na.rm=TRUE), ratio95=quantile(prop.ratio, .95, na.rm=TRUE)) %>% ggplot(aes(x=reorder(feature, ratio, median), fill=project, y=ratio)) + geom_bar(color='black', position='dodge', stat='identity') + geom_errorbar(aes(group=project, ymin=ratio5, ymax=ratio95), position='dodge') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+sat.enr.nosd %>% filter(feature %in% sat.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE)) %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+### Overlap distribution
+
+Proportion of the call overlapped
+
+```{r satol}
+cnv.germ$sat.prop = cnv.germ %>% makeGRangesFromDataFrame %>% olProp(sat.gr)
+cnv.germ$sat.loc = cnv.germ %>% makeGRangesFromDataFrame %>% olLoc(sat.gr)
+rand.sd.germ.gr$sat.prop = olProp(rand.sd.germ.gr, sat.gr)
+rand.sd.germ.gr$sat.loc = olLoc(rand.sd.germ.gr, sat.gr)
+
+sat.ol = rbind(
+    cnv.germ %>% select(sat.prop, sat.loc) %>% mutate(set='CNV'),
+    rand.sd.germ.gr %>% as.data.frame %>% select(sat.prop, sat.loc) %>% mutate(set='control'))
+
+sat.ol %>% filter(sat.prop>0) %>% ggplot(aes(x=sat.prop, fill=set, y=..density..)) + geom_histogram(position="dodge") + theme_bw() + xlab("proportion of the region") + ylab("density")
+
+sat.ol %>% filter(sat.prop>0) %>% group_by(sat.loc,set) %>% summarize(nb=n()) %>% group_by(set) %>% mutate(prop=nb/sum(nb)) %>% ggplot(aes(x=sat.loc, fill=set, y=prop)) + ggplot2::geom_bar(stat="identity", position="dodge") + theme_bw() + xlab("location relative to the region") + ylab("proportion of regions")
+```
+
+## STR families
+
+### Enrichment
+
+```{r str}
+str.ordered = simprep %>% as.data.frame %>% group_by(sequence) %>% summarize(n=n()) %>% arrange(desc(n))
+simprep$sequence2 = ifelse(simprep$sequence %in% head(str.ordered$sequence,20), simprep$sequence, 'others')
+simprepl = split(simprep, simprep$sequence2)
+
+str.enr.nosd = regionCharNoSD(cnv.df, simprepl, rand.sd.gr, nb.cores=NB.CORES)
+str.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
+```
+
+```{r strgraph}
+str.enr.nosd.s = str.enr.nosd %>% filter(germline) %>% group_by(feature) %>% filter(any(qv<.05)) %>% select(feature) %>% unique
+str.enr.nosd %>% filter(feature %in% str.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
+str.enr.nosd %>% filter(feature %in% str.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(ratio=median(prop.ratio, na.rm=TRUE), ratio5=quantile(prop.ratio, .05, na.rm=TRUE), ratio95=quantile(prop.ratio, .95, na.rm=TRUE)) %>% ggplot(aes(x=reorder(feature, ratio, median), fill=project, y=ratio)) + geom_bar(color='black', position='dodge', stat='identity') + geom_errorbar(aes(group=project, ymin=ratio5, ymax=ratio95), position='dodge') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+str.enr.nosd %>% filter(feature %in% str.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE)) %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+### Overlap distribution
+
+Proportion of the call overlapped
+
+```{r strol}
+cnv.germ$str.prop = cnv.germ %>% makeGRangesFromDataFrame %>% olProp(simprep)
+cnv.germ$str.loc = cnv.germ %>% makeGRangesFromDataFrame %>% olLoc(simprep)
+rand.sd.germ.gr$str.prop = olProp(rand.sd.germ.gr, simprep)
+rand.sd.germ.gr$str.loc = olLoc(rand.sd.germ.gr, simprep)
+
+str.ol = rbind(
+    cnv.germ %>% select(str.prop, str.loc) %>% mutate(set='CNV'),
+    rand.sd.germ.gr %>% as.data.frame %>% select(str.prop, str.loc) %>% mutate(set='control'))
+
+str.ol %>% filter(str.prop>0) %>% ggplot(aes(x=str.prop, fill=set, y=..density..)) + geom_histogram(position="dodge") + theme_bw() + xlab("proportion of the region") + ylab("density")
+
+str.ol %>% filter(str.prop>0) %>% group_by(str.loc,set) %>% summarize(nb=n()) %>% group_by(set) %>% mutate(prop=nb/sum(nb)) %>% ggplot(aes(x=str.loc, fill=set, y=prop)) + ggplot2::geom_bar(stat="identity", position="dodge") + theme_bw() + xlab("location relative to the region") + ylab("proportion of regions")
+```
+
+### Size of the STRs overlapped
+
+```{r strsize}
+simprep.size.grl = split(simprep, cut(width(simprep), breaks=c(0,100,500,Inf)))
+strsize.enr.nosd = regionCharNoSD(cnv.df, simprep.size.grl, rand.sd.gr, nb.cores=NB.CORES)
+strsize.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
+
+strsize.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
+strsize.enr.nosd %>% group_by(project, feature) %>% summarize(ratio=median(prop.ratio, na.rm=TRUE), ratio5=quantile(prop.ratio, .05, na.rm=TRUE), ratio95=quantile(prop.ratio, .95, na.rm=TRUE)) %>% ggplot(aes(x=reorder(feature, ratio, median), fill=project, y=ratio)) + geom_bar(color='black', position='dodge', stat='identity') + geom_errorbar(aes(group=project, ymin=ratio5, ymax=ratio95), position='dodge') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+strsize.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE)) %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+## Transposable element
+
+### Family enrichment
+
+```{r tefam}
+tefam.grl = split(te.gr, te.gr$repFamily)
+tefam.enr.nosd = regionCharNoSD(cnv.df, tefam.grl, rand.sd.gr, nb.cores=NB.CORES)
+tefam.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
+```
+
+```{r tefamgraph}
+tefam.enr.nosd.s = tefam.enr.nosd %>% filter(germline) %>% group_by(feature) %>% filter(any(qv<.05)) %>% select(feature) %>% unique
+tefam.enr.nosd %>% filter(feature %in% tefam.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
+tefam.enr.nosd  %>% filter(feature %in% tefam.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(ratio=median(prop.ratio, na.rm=TRUE), ratio5=quantile(prop.ratio, .05, na.rm=TRUE), ratio95=quantile(prop.ratio, .95, na.rm=TRUE)) %>% ggplot(aes(x=reorder(feature, ratio, median), fill=project, y=ratio)) + geom_bar(color='black', position='dodge', stat='identity') + geom_errorbar(aes(group=project, ymin=ratio5, ymax=ratio95), position='dodge') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+tefam.enr.nosd %>% filter(feature %in% tefam.enr.nosd.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE)) %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+### Sub-family enrichment
+
+```{r te}
+te.ordered = te.gr %>% as.data.frame %>% group_by(repName, repFamily, repClass) %>% summarize(n=n()) %>% arrange(desc(n)) %>% filter(repFamily %in% c("L1", 'Other', 'ERVK', 'ERV1')) %>% filter(n>500)
+te.top.gr = subset(te.gr, repName %in% te.ordered$repName)
+te.grl = split(te.top.gr, te.top.gr$repName)
+te.enr.nosd = regionCharNoSD(cnv.df, te.grl, rand.sd.gr, nb.cores=NB.CORES)
+```
+
+```{r tetop}
+te.enr.nosd.top.s = te.enr.nosd %>% merge(projects.df) %>% filter(germline) %>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% group_by(feature) %>% filter(any(qv<.05)) %>% select(feature) %>% unique
+te.enr.nosd.top = te.enr.nosd %>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% filter(feature %in% te.enr.nosd.top.s$feature) %>% merge(projects.df)
+
+te.enr.nosd.top %>% group_by(feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
+te.enr.nosd.top %>% group_by(project, feature) %>% summarize(ratio=median(prop.ratio, na.rm=TRUE), ratio5=quantile(prop.ratio, .05, na.rm=TRUE), ratio95=quantile(prop.ratio, .95, na.rm=TRUE)) %>% ggplot(aes(x=reorder(feature, ratio, median), fill=project, y=ratio)) + geom_bar(color='black', position='dodge', stat='identity') + geom_errorbar(aes(group=project, ymin=ratio5, ymax=ratio95), position='dodge') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("fold enrichment") + geom_hline(yintercept=1, linetype=2)
+
+te.enr.nosd.top %>% filter(feature %in% te.enr.nosd.top.s$feature) %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE)) %>% mutate(p.value=as.character(signif(p.value,3))) %>% kable(digits=3)
+```
+
+### Overlap distribution
+
+Proportion of the call overlapped
+
+```{r teol}
+cnv.germ$te.prop = cnv.germ %>% makeGRangesFromDataFrame %>% olProp(te.gr)
+cnv.germ$te.loc = cnv.germ %>% makeGRangesFromDataFrame %>% olLoc(te.gr)
+rand.sd.germ.gr$te.prop = olProp(rand.sd.germ.gr, te.gr)
+rand.sd.germ.gr$te.loc = olLoc(rand.sd.germ.gr, te.gr)
+
+te.ol = rbind(
+    cnv.germ %>% select(te.prop, te.loc) %>% mutate(set='CNV'),
+    rand.sd.germ.gr %>% as.data.frame %>% select(te.prop, te.loc) %>% mutate(set='control'))
+
+te.ol %>% filter(te.prop>0) %>% ggplot(aes(x=te.prop, fill=set, y=..density..)) + geom_histogram(position="dodge") + theme_bw() + xlab("proportion of the region") + ylab("density")
+
+te.ol %>% filter(te.prop>0) %>% group_by(te.loc,set) %>% summarize(nb=n()) %>% group_by(set) %>% mutate(prop=nb/sum(nb)) %>% ggplot(aes(x=te.loc, fill=set, y=prop)) + ggplot2::geom_bar(stat="identity", position="dodge") + theme_bw() + xlab("location relative to the region") + ylab("proportion of regions")
+```
+
+```{r paperout, echo=FALSE}
+save(dc.df, covclass.enr,  covclass.enr.nosd, covclass.enr.s,  covclass.enr.nosd.s, sat.enr.nosd, sat.enr.nosd.s, sat.ol, str.enr.nosd, str.enr.nosd.s, str.ol, strsize.enr.nosd, tefam.enr.nosd, tefam.enr.nosd.s, te.enr.nosd.top, te.ol, file='PopSV-repeatEnr.RData')
+```
+

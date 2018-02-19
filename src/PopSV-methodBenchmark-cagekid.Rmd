@@ -1,0 +1,155 @@
+---
+title: Methods benchmark using the CageKid dataset
+author: Jean Monlong
+output:
+  md_document:
+    variant: markdown_github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo=TRUE, message=FALSE, warning=FALSE, fig.width=10, tidy=TRUE)
+```
+
+# Methods benchmark using the CageKid dataset
+
+The [CageKid consortium](https://www.cng.fr/cagekid/) provides WGS for normal/tumor pairs of clear-cell renal carcinoma. Here we use the germline calls to evaluate the performance of the different CNV detection methods. For the vast majority of CNVs, we expect a germline variant to be present in the tumor.
+
+## Load packages, functions and data
+
+```{r libfun}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(PopSV)
+library(GenomicRanges)
+library(ggdendro)
+library(fpc)
+library(knitr)
+
+winsor <- function(x, u=3){
+  u = median(x, na.rm=TRUE)*u
+  if(any(x>u)) x[x>u]=u
+  x
+}
+```
+
+
+## Normal-tumor pair information
+
+```{r info}
+load("../data/cagekid-files.RData")
+normals = subset(files.df, status=="normal")$sample
+inds = subset(files.df, sample %in% normals)$individual
+tumors = subset(files.df, individual %in% inds & status=="tumor")$sample
+```
+
+## CNVs from PopSV, FREEC, CNVnator, cn.MOPS, LUMPY
+
+```{r cnvs}
+load("../data/cnvs-PopSV-cagekid-5kbp-FDR001.RData")
+res.df$method = "PopSV"
+res.df %<>% filter(sample %in% normals)
+load("../data/cnvs-otherMethods-cagekid-5kbp.RData")
+com.cols = intersect(colnames(res.df), colnames(others.df))
+cnv.df = rbind(res.df[,com.cols], subset(others.df, sample %in% normals & set=="stringent")[,com.cols])
+
+## Palette and method order
+cbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+methods.f = c("LUMPY","CNVnator","cn.MOPS","FREEC","PopSV")
+cnv.df$method = factor(as.character(cnv.df$method), levels=methods.f)
+```
+
+## Frequency, coverage and repeat annotation
+
+Here I directly annotate and remove calls that overlaps 50% or more of the samples (in each method separately).
+Computing the exact frequency would take too much time here because of the very large number of LUMPY calls and the large sample size.
+Computing directly the common regions (CNV in >50% of the sample)) and filtering the calls with this track is more optimized and what we want to do eventually.
+
+```{r freq}
+freq50 <- function(df){
+  com50 = freq.range(df) %>% filter(prop>=.5) %>% makeGRangesFromDataFrame %>% reduce
+  df$prop50 = df %>% makeGRangesFromDataFrame %>% overlapsAny(com50)
+  df
+}
+cnv.df %<>% group_by(method) %>% do(freq50(.))
+cnv.df %>% group_by(method) %>% summarize(prop.prop50=mean(prop50)) %>% kable(digits=3)
+cnv.df %<>% filter(!prop50)
+```
+
+```{r repcov}
+load('../data/rm.RData')
+load('../data/centelgap.RData')
+load('../data/segdup.RData')
+load('../data/cagekid-coverage-tracks-5kbp.RData')
+lowmap.gr = ns.df %>% filter(cov.class=='low') %>% makeGRangesFromDataFrame %>% reduce
+extlowmap.gr = ns.df %>% filter(cov.class2=='extremely low') %>% makeGRangesFromDataFrame %>% reduce
+
+olProp <- function(qgr, sgr){
+  sgr = reduce(sgr)
+  ol = findOverlaps(qgr, sgr) %>% as.data.frame %>% mutate(qw=width(qgr)[queryHits], qsw=width(pintersect(qgr[queryHits], sgr[subjectHits]))) %>% group_by(queryHits) %>% summarize(prop=sum(qsw/qw))
+  res = rep(0, length(qgr))
+  res[ol$queryHits] = ol$prop
+  res
+}
+
+cnv.gr = makeGRangesFromDataFrame(cnv.df)
+cnv.df$lowmap.prop = olProp(cnv.gr, lowmap.gr)
+cnv.df$extlowmap.prop = olProp(cnv.gr, extlowmap.gr)
+cnv.df$rep.prop = olProp(cnv.gr, rm)
+cnv.df$segdup.prop = olProp(cnv.gr, segdup)
+cnv.df$centelgap.d = distanceToNearest(cnv.gr, centelgap) %>% as.data.frame %>% .$distance
+
+ggplot(cnv.df, aes(x=lowmap.prop)) + geom_histogram() + theme_bw() + facet_wrap(~method, scales='free') + ylab('CNV call') + xlab('proportion of the call overlapping a low-coverage region')
+ggplot(cnv.df, aes(x=extlowmap.prop)) + geom_histogram() + theme_bw() + facet_wrap(~method, scales='free') + ylab('CNV call') + xlab('proportion of the call overlapping an extremely low-coverage region')
+ggplot(cnv.df, aes(x=segdup.prop)) + geom_histogram() + theme_bw() + facet_wrap(~method, scales='free') + ylab('CNV call') + xlab('proportion of the call overlapping a segmental duplication')
+ggplot(cnv.df, aes(x=rep.prop)) + geom_histogram() + theme_bw() + facet_wrap(~method, scales='free') + ylab('CNV call') + xlab('proportion of the call overlapping an annotated repeat')
+```
+
+
+## Replication in the paired tumor
+
+```{r replication}
+load("../data/cnvs-PopSV-cagekid-5kbp-FDR05.RData")
+cnv.l = subset(res.df, sample %in% tumors)
+rm(res.df)
+cnv.l = data.frame(method="PopSV", set="loose", cnv.l[, c("sample","chr","start","end")])
+cnv.l = rbind(cnv.l, subset(others.df, sample %in% tumors & set=="loose")[,  c("method","set","sample","chr","start","end")])
+rm(others.df)
+cnv.s = merge(cnv.df, files.df)
+cnv.l = merge(cnv.l, files.df)
+
+concordance.nt  <- function(cnv.df, cnv.2.df){
+  cnv.df$conc = overlapsAny(makeGRangesFromDataFrame(cnv.df), makeGRangesFromDataFrame(cnv.2.df))
+  cnv.df
+}
+
+cnv.s = cnv.s %>% group_by(method) %>% do({subset(., individual %in% unique(subset(cnv.l, method==.$method[1])$individual))})
+cnv.s = cnv.s %>% group_by(method, individual) %>% do(concordance.nt(., subset(cnv.l, method==.$method[1] & individual==.$individual[1]))) %>% ungroup
+```
+
+```{r repgraphs}
+conc.nt = rbind(data.frame(region='all', cnv.s),
+    data.frame(region='low-mappability', cnv.s %>% filter(lowmap.prop>.9)),
+    data.frame(region='segmental duplication', cnv.s %>% filter(segdup.prop>.9)),
+    data.frame(region='repeat', cnv.s %>% filter(rep.prop>.7)),
+    data.frame(region='1 Mbp from gap', cnv.s %>% filter(centelgap.d<1e6)))
+
+conc.nt = conc.nt %>% group_by(sample, method, region) %>% summarize(nb.c=sum(conc), prop.c=mean(conc)) %>% ungroup %>% mutate(method = factor(as.character(method), levels=methods.f))
+conc.nt.q = conc.nt %>% group_by(region, method) %>% summarize(nb.med=median(nb.c), nb.q3=quantile(nb.c, .95), nb.q1=quantile(nb.c, .05), prop.med=median(prop.c), prop.q3=quantile(prop.c, .95), prop.q1=quantile(prop.c, .05))
+
+ggplot(conc.nt.q, aes(x=nb.med, y=prop.med, colour=region)) + geom_point() + theme_bw() + geom_errorbar(aes(ymin=prop.q1, ymax=prop.q3)) + geom_errorbarh(aes(xmin=nb.q1, xmax=nb.q3)) + facet_wrap(~method) + xlab('number of replicated calls') + ylab('proportion of replicated calls') + theme(legend.position=c(1,0), legend.justification=c(1,0))
+
+ggplot(conc.nt.q, aes(x=nb.med, y=prop.med, colour=method)) + geom_point() + theme_bw() + geom_errorbar(aes(ymin=prop.q1, ymax=prop.q3)) + geom_errorbarh(aes(xmin=nb.q1, xmax=nb.q3)) + facet_wrap(~region) + xlab('number of replicated calls per sample') + ylab('proportion of replicated calls per sample') + theme(legend.position=c(1,0), legend.justification=c(1,0)) + scale_colour_manual(values=cbPalette)
+
+ggplot(conc.nt,aes(x=method,y=prop.c)) + geom_boxplot(aes(fill=region)) + theme_bw() + xlab("")  + ylab("proportion of replicated calls per sample") + ylim(0,1) + facet_grid(.~method, scales='free')
+ggplot(conc.nt,aes(x=method,y=winsor(nb.c,10))) + geom_boxplot(aes(fill=region)) + theme_bw() + xlab("")  + ylab("number of replicated calls per sample")
+
+conc.nt.m = conc.nt %>% group_by(method, region) %>% summarize(nb.c=median(nb.c), prop.c=median(prop.c))
+conc.nt.m %>% arrange(desc(method)) %>% kable(digits=3)
+conc.nt.m %>% filter(method=='PopSV') %>% merge(conc.nt.m, by=c('region'), suffixes=c('.popsv','.other')) %>% mutate(popsv.fc=nb.c.popsv/nb.c.other) %>% filter(method.other!='PopSV') %>% select(region, method.other, popsv.fc) %>% arrange(region) %>% kable(digits=3)
+```
+
+
+```{r paperout, echo=FALSE}
+save(conc.nt.q, conc.nt, file='PopSV-methodBenchmark-cagekid.RData')
+```
