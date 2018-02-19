@@ -67,7 +67,7 @@ Computing directly the common regions (CNV in >50% of the sample)) and filtering
 
 ```{r freq}
 freq50 <- function(df){
-  com50 = freq.range(df) %>% filter(prop>=.5) %>% makeGRangesFromDataFrame %>% reduce
+  com50 = df %>% group_by(chr) %>% do(freq.range(.)) %>% filter(prop>=.5) %>% makeGRangesFromDataFrame %>% reduce
   df$prop50 = df %>% makeGRangesFromDataFrame %>% overlapsAny(com50)
   df
 }

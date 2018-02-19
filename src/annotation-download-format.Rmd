@@ -123,7 +123,7 @@ tgp = readVcf('../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'hg19
 tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type=SVTYPE, end=END) %>% dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% dplyr::select(seqnames, start), geno(tgp)$GT %>% as.data.frame)
 rownames(tgp.df) = NULL
 nb.samps = ncol(geno(tgp)$GT)
-tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% gather(sample, geno, 5:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0', seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% filter(seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% gather(sample, geno, 5:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0') %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
 tgp = makeGRangesFromDataFrame(tgp.df, keep.extra.columns=TRUE)
 save(tgp, file='../data/tgp-CNV-noX.RData')
 tgp %>% as.data.frame %>% head %>% mutate(geno=gsub('\\|', '\\/', geno)) %>% kable
