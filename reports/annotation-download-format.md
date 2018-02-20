@@ -193,33 +193,55 @@ segdup %>% as.data.frame %>% head %>% kable
 ``` r
 tgp = readVcf("../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz", "hg19")
 tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type = SVTYPE, end = END) %>% 
-    dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% dplyr::select(seqnames, 
-    start), geno(tgp)$GT %>% as.data.frame)
+    dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% mutate(ALT = unlist(lapply(ALT, 
+    paste, collapse = ";"))) %>% dplyr::select(seqnames, start, ALT), geno(tgp)$GT %>% 
+    as.data.frame)
 rownames(tgp.df) = NULL
 nb.samps = ncol(geno(tgp)$GT)
 tgp.df = tgp.df %>% mutate(type = ifelse(grepl("DEL", type), "DEL", type)) %>% 
     filter(seqnames != "X", type %in% c("CNV", "DEL", "DUP")) %>% gather(sample, 
-    geno, 5:ncol(tgp.df)) %>% filter(geno != "0|0", geno != ".", geno != "0") %>% 
+    geno, 6:ncol(tgp.df)) %>% filter(geno != "0|0", geno != ".", geno != "0") %>% 
     group_by(seqnames, start, end) %>% mutate(prop = n()/nb.samps, svsize = end - 
     start)
+
+genoToCN <- function(df) {
+    alt = df$ALT[1]
+    if (alt %in% c("A", "T", "G", "C")) {
+        if (all(df$type == "DEL")) {
+            cns = c(1, 0)
+        } else {
+            stop("Should be a deletion from ALT but is not according to type")
+        }
+    } else {
+        cns = gsub("<CN([0-9])>", "\\1", alt) %>% strsplit(";") %>% unlist %>% 
+            as.numeric
+        cns = c(1, cns)
+    }
+    geno.mat = strsplit(df$geno, "\\|") %>% unlist %>% as.numeric %>% matrix(2)
+    df$CN = cns[geno.mat[1, ] + 1] + cns[geno.mat[2, ] + 1]
+    df
+}
+
+tgp.df = tgp.df %>% group_by(ALT) %>% do(genoToCN(.)) %>% mutate(type = ifelse(CN < 
+    2, "DEL", NA), type = ifelse(CN > 2, "DUP", type))
 tgp = makeGRangesFromDataFrame(tgp.df, keep.extra.columns = TRUE)
-save(tgp, file = "../data/tgp-CNV-noX.RData")
-tgp %>% as.data.frame %>% head %>% mutate(geno = gsub("\\|", "\\/", geno)) %>% 
-    kable
+tgp$geno = tgp$ALT = NULL
+save(tgp, file = "../data/tgp-CNV-noX-noCNV.RData")
+tgp %>% as.data.frame %>% head %>% kable
 ```
 
-| seqnames |     start|       end|  width| strand | type | sample  | geno |       prop|  svsize|
-|:---------|---------:|---------:|------:|:-------|:-----|:--------|:-----|----------:|-------:|
-| 1        |   4204667|   4204717|     51| \*     | DEL  | HG00096 | 1/0  |  0.9604633|      50|
-| 1        |   6434482|   6445321|  10840| \*     | DEL  | HG00096 | 1/0  |  0.0087859|   10839|
-| 1        |   6438160|   6445897|   7738| \*     | DEL  | HG00096 | 1/0  |  0.0119808|    7737|
-| 1        |   7570074|   7571521|   1448| \*     | DEL  | HG00096 | 0/1  |  0.2919329|    1447|
-| 1        |   8200707|   8211256|  10550| \*     | DUP  | HG00096 | 0/1  |  0.0163738|   10549|
-| 1        |  10482499|  10483790|   1292| \*     | DEL  | HG00096 | 1/0  |  0.5371406|    1291|
+| seqnames |     start|       end|  width| strand | type | sample  |       prop|  svsize|   CN|
+|:---------|---------:|---------:|------:|:-------|:-----|:--------|----------:|-------:|----:|
+| 1        |   6434482|   6445321|  10840| \*     | DEL  | HG00096 |  0.0087859|   10839|    1|
+| 1        |   6438160|   6445897|   7738| \*     | DEL  | HG00096 |  0.0119808|    7737|    1|
+| 1        |   7570074|   7571521|   1448| \*     | DEL  | HG00096 |  0.2919329|    1447|    1|
+| 1        |  10482499|  10483790|   1292| \*     | DEL  | HG00096 |  0.5371406|    1291|    1|
+| 1        |  11682873|  11683189|    317| \*     | DEL  | HG00096 |  0.7232428|     316|    1|
+| 1        |  17676165|  17677662|   1498| \*     | DEL  | HG00096 |  0.5227636|    1497|    1|
 
 The catalog is reformatted to have one row per sample/variant. We save the coordinates and SV type information.
 
-To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*. To compare with PopSV we also removed variants smaller than 300bp, in chromosome X, or affecting more than 80% of the samples.
+To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*. For variants with *SVTYPE=CNV*, we compute the copy number from the genotype and (if different from 2) assign *DEL*/*DUP* for each sample. The copy-number information is saved in column *CN*. To compare with PopSV we removed variants in chromosome X.
 
 PacBio (Chaisson et al) SV catalog
 ----------------------------------
@@ -251,6 +273,17 @@ OMIM disease genes
 
 ``` r
 library(biomaRt)
+omim.marts = listMarts()
+omim.marts
+```
+
+    ##                biomart               version
+    ## 1 ENSEMBL_MART_ENSEMBL      Ensembl Genes 91
+    ## 2   ENSEMBL_MART_MOUSE      Mouse strains 91
+    ## 3     ENSEMBL_MART_SNP  Ensembl Variation 91
+    ## 4 ENSEMBL_MART_FUNCGEN Ensembl Regulation 91
+
+``` r
 ensembl = useMart("ENSEMBL_MART_ENSEMBL", dataset = "hsapiens_gene_ensembl", 
     host = "Aug2017.archive.ensembl.org")
 omim = getBM(attributes = c("hgnc_symbol", "mim_morbid_description"), mart = ensembl)
@@ -260,7 +293,7 @@ mergeDiseaseDesc <- function(desc) {
 }
 omim %<>% filter(mim_morbid_description != "") %>% group_by(hgnc_symbol) %>% 
     summarize(mim_morbid_description = mergeDiseaseDesc(mim_morbid_description))
-save(omim, file = "../data/omim-genes.RData")
+save(omim, omim.marts, file = "../data/omim-genes.RData")
 ```
 
 There are 3438 OMIM genes.

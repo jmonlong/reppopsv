@@ -59,7 +59,7 @@ cnv.df %<>% mutate(extlowmap=extlowmap.prop>=.9, lowmap=lowmap.prop>=.9, type=if
 
 ## CNV catalog
 
-```{r popsvcat}
+```{r popsvcat, cache=TRUE}
 compAllNumbers <- function(reg.df){
   sizeGenFun <- function(df){
     df %>% makeGRangesFromDataFrame %>% reduce %>% width %>% sum / 1e6
@@ -120,19 +120,18 @@ On average in the individuals from the Twins dataset and the normals from the Ca
 ## 1000 Genomes Project CNV catalog
 
 ```{r tgpcat}
-load('../data/tgp-CNV-noX.RData')
+load('../data/tgp-CNV-noX-noCNV.RData')
 tgp.comp = subset(tgp, svsize>300 & prop<.8)
 tgp.comp$extlowmap.prop = olProp(tgp.comp, extlowmap.gr)
 tgp.comp$extlowmap = tgp.comp$extlowmap.prop >= .9
 ```
 
-```{r tgpcattable}
+```{r tgpcattable, cache=TRUE}
 nbCallCollapsed <- function(reg.gr){
   reg.gr %>% as.data.frame %>% select(seqnames, start, end) %>% unique %>% nrow
 }
 sum.tgp.df = rbind(
     tgp.comp %>% as.data.frame %>% compAllNumbers %>% mutate(project='1000GP', type='all'),
-    tgp.comp %>% as.data.frame %>% filter(type=='CNV') %>% compAllNumbers %>% mutate(project='1000GP', type='CNV'),
     tgp.comp %>% as.data.frame %>% filter(type=='DEL') %>% compAllNumbers %>% mutate(project='1000GP', type='DEL'),
     tgp.comp %>% as.data.frame %>% filter(type=='DUP') %>% compAllNumbers %>% mutate(project='1000GP', type='DUP'))
     
@@ -145,7 +144,7 @@ On average per sample, there is `r round(prop.gain[1]*100,2)`% more of the genom
 
 ## Frequency distribution
 
-```{r freq}
+```{r freq, cache=TRUE}
 ## Remove related samples in the Twins dataset
 load("../data/twins-5kbp-files.RData")
 twins = files.df %>% filter(grepl('Twin', ped)) %>% select(sample, ped)
@@ -174,7 +173,7 @@ sv.chaisson.gr = makeGRangesFromDataFrame(sv.chaisson)
 reduceDF <- function(df){
   df %>% makeGRangesFromDataFrame %>% reduce %>% as.data.frame
 }
-tgp.col = tgp %>% as.data.frame %>% dplyr::select(-sample, -geno) %>% unique %>% group_by(type) %>% do(reduceDF(.)) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+tgp.col = tgp %>% as.data.frame %>% dplyr::select(-sample, -CN) %>% unique %>% filter(type %in% c('DEL','DUP')) %>% group_by(type) %>% do(reduceDF(.)) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
 popsv.col = cnv.df %>% dplyr::select(chr, start, end, type) %>% unique %>% group_by(type) %>% do(reduceDF(.)) %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 ## Merge catalogs
 catalogs = list(PopSV=popsv.col, '1000GP'=tgp.col)

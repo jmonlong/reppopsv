@@ -150,7 +150,7 @@ On average in the individuals from the Twins dataset and the normals from the Ca
 --------------------------------
 
 ``` r
-load("../data/tgp-CNV-noX.RData")
+load("../data/tgp-CNV-noX-noCNV.RData")
 tgp.comp = subset(tgp, svsize > 300 & prop < 0.8)
 tgp.comp$extlowmap.prop = olProp(tgp.comp, extlowmap.gr)
 tgp.comp$extlowmap = tgp.comp$extlowmap.prop >= 0.9
@@ -162,11 +162,10 @@ nbCallCollapsed <- function(reg.gr) {
         nrow
 }
 sum.tgp.df = rbind(tgp.comp %>% as.data.frame %>% compAllNumbers %>% mutate(project = "1000GP", 
-    type = "all"), tgp.comp %>% as.data.frame %>% filter(type == "CNV") %>% 
-    compAllNumbers %>% mutate(project = "1000GP", type = "CNV"), tgp.comp %>% 
-    as.data.frame %>% filter(type == "DEL") %>% compAllNumbers %>% mutate(project = "1000GP", 
-    type = "DEL"), tgp.comp %>% as.data.frame %>% filter(type == "DUP") %>% 
-    compAllNumbers %>% mutate(project = "1000GP", type = "DUP"))
+    type = "all"), tgp.comp %>% as.data.frame %>% filter(type == "DEL") %>% 
+    compAllNumbers %>% mutate(project = "1000GP", type = "DEL"), tgp.comp %>% 
+    as.data.frame %>% filter(type == "DUP") %>% compAllNumbers %>% mutate(project = "1000GP", 
+    type = "DUP"))
 
 sum.tgp.df %>% select(project, type, everything()) %>% kable(digits = 2)
 ```
@@ -174,9 +173,8 @@ sum.tgp.df %>% select(project, type, everything()) %>% kable(digits = 2)
 | project | type |  sample|  nb.calls|  nb.calls.samp|  nb.lm.samp|  mean.size.kb|  prop.less3kb|  nb.less3kb.samp|  gen.mb|  gen.mb.min|  gen.mb.samp|  gen.mb.max|
 |:--------|:-----|-------:|---------:|--------------:|-----------:|-------------:|-------------:|----------------:|-------:|-----------:|------------:|-----------:|
 | 1000GP  | all  |    2504|     41979|        1024.44|        2.22|          6.00|          0.68|           700.52|  580.03|        3.39|         6.14|       26.30|
-| 1000GP  | CNV  |    2504|      2713|          92.07|        0.77|         25.23|          0.00|             0.00|   84.07|        0.81|         2.32|        6.69|
-| 1000GP  | DEL  |    2504|     33520|         920.97|        1.45|          3.56|          0.76|           700.52|  298.55|        2.16|         3.28|       10.58|
-| 1000GP  | DUP  |    2502|      5790|          11.41|        0.00|         47.32|          0.00|             0.00|  264.09|        0.01|         0.54|        9.60|
+| 1000GP  | DEL  |    2504|     36102|         975.32|        2.21|          4.67|          0.72|           700.52|  342.97|        2.73|         4.56|       14.98|
+| 1000GP  | DUP  |    2504|      8503|          48.26|        0.00|         32.54|          0.00|             0.00|  331.48|        0.28|         1.57|       11.32|
 
 ``` r
 prop.gain = merge.sum$gen.mb.samp/subset(sum.tgp.df, type == "all")$gen.mb.samp - 
@@ -229,8 +227,9 @@ sv.chaisson.gr = makeGRangesFromDataFrame(sv.chaisson)
 reduceDF <- function(df) {
     df %>% makeGRangesFromDataFrame %>% reduce %>% as.data.frame
 }
-tgp.col = tgp %>% as.data.frame %>% dplyr::select(-sample, -geno) %>% unique %>% 
-    group_by(type) %>% do(reduceDF(.)) %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
+tgp.col = tgp %>% as.data.frame %>% dplyr::select(-sample, -CN) %>% unique %>% 
+    filter(type %in% c("DEL", "DUP")) %>% group_by(type) %>% do(reduceDF(.)) %>% 
+    makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 popsv.col = cnv.df %>% dplyr::select(chr, start, end, type) %>% unique %>% group_by(type) %>% 
     do(reduceDF(.)) %>% makeGRangesFromDataFrame(keep.extra.columns = TRUE)
 ## Merge catalogs
@@ -292,16 +291,16 @@ chaisson.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0560314|
-| all          | PopSV   |   0.5451741|
-| deletion     | 1000GP  |   0.2321291|
-| deletion     | PopSV   |   0.2248042|
-| duplication  | 1000GP  |  -0.3702047|
-| duplication  | PopSV   |   0.8169537|
-| low-map      | 1000GP  |  -0.0031623|
-| low-map      | PopSV   |   0.7264475|
-| ext. low-map | 1000GP  |  -0.2408431|
-| ext. low-map | PopSV   |   0.0447992|
+| all          | 1000GP  |   0.0442356|
+| all          | PopSV   |   0.5478336|
+| deletion     | 1000GP  |   0.1980867|
+| deletion     | PopSV   |   0.2283583|
+| duplication  | 1000GP  |  -0.2905387|
+| duplication  | PopSV   |   0.8111299|
+| low-map      | 1000GP  |  -0.0015105|
+| low-map      | PopSV   |   0.7166357|
+| ext. low-map | 1000GP  |  -0.1971681|
+| ext. low-map | PopSV   |   0.0231800|
 
 ### Pendleton et al
 
@@ -342,16 +341,16 @@ pend.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0598020|
-| all          | PopSV   |   0.5972899|
-| deletion     | 1000GP  |   0.2442432|
-| deletion     | PopSV   |   0.2859889|
-| duplication  | 1000GP  |  -0.4753851|
-| duplication  | PopSV   |   0.8681149|
-| low-map      | 1000GP  |   0.1062318|
-| low-map      | PopSV   |   1.0142948|
-| ext. low-map | 1000GP  |   0.3510517|
-| ext. low-map | PopSV   |   0.8302212|
+| all          | 1000GP  |   0.0578390|
+| all          | PopSV   |   0.5944038|
+| deletion     | 1000GP  |   0.2189456|
+| deletion     | PopSV   |   0.2803774|
+| duplication  | 1000GP  |  -0.3480136|
+| duplication  | PopSV   |   0.8564898|
+| low-map      | 1000GP  |   0.0991162|
+| low-map      | PopSV   |   0.9905412|
+| ext. low-map | 1000GP  |   0.3364722|
+| ext. low-map | PopSV   |   0.7923829|
 
 Novel CNV regions
 -----------------

@@ -96,7 +96,7 @@ centelgap %>% as.data.frame %>% head %>% kable
 
 ## Simple repeats
 
-```{r simprep, cache=TRUE}
+```{r simprep}
 simprep = read.table('../data/simpleRepeat.txt.gz', as.is=TRUE, sep="\t")
 simprep = simprep[,c(2:4, 17)]
 colnames(simprep) = c("chr","start","end", 'sequence')
@@ -120,20 +120,42 @@ segdup %>% as.data.frame %>% head %>% kable
 
 ```{r tkgp, cache=TRUE}
 tgp = readVcf('../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'hg19')
-tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type=SVTYPE, end=END) %>% dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% dplyr::select(seqnames, start), geno(tgp)$GT %>% as.data.frame)
+tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type=SVTYPE, end=END) %>% dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% mutate(ALT=unlist(lapply(ALT, paste, collapse=';'))) %>% dplyr::select(seqnames, start, ALT), geno(tgp)$GT %>% as.data.frame)
 rownames(tgp.df) = NULL
 nb.samps = ncol(geno(tgp)$GT)
-tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% filter(seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% gather(sample, geno, 5:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0') %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% filter(seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% gather(sample, geno, 6:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0') %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+
+genoToCN <- function(df){
+  alt = df$ALT[1]
+  if(alt %in% c('A','T','G','C')){
+    if(all(df$type=='DEL')){
+      cns = c(1,0)
+    } else {
+      stop('Should be a deletion from ALT but is not according to type')
+    }
+  } else {
+    cns = gsub('<CN([0-9])>','\\1',alt) %>% strsplit(';') %>% unlist %>% as.numeric
+    cns = c(1,cns)
+  }
+  geno.mat = strsplit(df$geno, '\\|') %>% unlist %>% as.numeric %>% matrix(2)
+  df$CN = cns[geno.mat[1,]+1] + cns[geno.mat[2,]+1]
+  df
+}
+
+tgp.df = tgp.df %>% group_by(ALT) %>% do(genoToCN(.)) %>% mutate(type=ifelse(CN<2,'DEL',NA), type=ifelse(CN>2,'DUP',type))
 tgp = makeGRangesFromDataFrame(tgp.df, keep.extra.columns=TRUE)
-save(tgp, file='../data/tgp-CNV-noX.RData')
-tgp %>% as.data.frame %>% head %>% mutate(geno=gsub('\\|', '\\/', geno)) %>% kable
+tgp$geno = tgp$ALT = NULL
+save(tgp, file='../data/tgp-CNV-noX-noCNV.RData')
+tgp %>% as.data.frame %>% head %>% kable
 ```
-	
+
 The catalog is reformatted to have one row per sample/variant.
 We save the coordinates and SV type information.
 
 To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*.
-To compare with PopSV we also removed variants smaller than 300bp, in chromosome X, or affecting more than 80% of the samples.
+For variants with *SVTYPE=CNV*, we compute the copy number from the genotype and (if different from 2) assign *DEL*/*DUP* for each sample.
+The copy-number information is saved in column *CN*.
+To compare with PopSV we removed variants in chromosome X.
 
 ## PacBio (Chaisson et al) SV catalog
 
@@ -153,13 +175,15 @@ sv.chaisson %>% sample_n(6) %>% kable(row.names=FALSE)
 
 ```{r omim, cache=TRUE}
 library(biomaRt)
+omim.marts = listMarts()
+omim.marts
 ensembl=useMart("ENSEMBL_MART_ENSEMBL", dataset="hsapiens_gene_ensembl", host='Aug2017.archive.ensembl.org')
 omim = getBM(attributes=c('hgnc_symbol', 'mim_morbid_description'), mart=ensembl)
 mergeDiseaseDesc <- function(desc){
   desc %>% gsub(';;',';', .) %>% strsplit(';') %>% unlist %>% unique %>% paste(collapse=';')
 }
 omim %<>% filter(mim_morbid_description != '') %>% group_by(hgnc_symbol) %>% summarize(mim_morbid_description=mergeDiseaseDesc(mim_morbid_description))
-save(omim, file='../data/omim-genes.RData')
+save(omim, omim.marts, file='../data/omim-genes.RData')
 ```
 
 There are `r nrow(omim)` OMIM genes.
