@@ -157,7 +157,7 @@ tgp.subsamps = tgp.comp$sample %>% unique %>% sample(nb.samp.ur)
 tgp.dd = tgp.comp %>% as.data.frame %>% dplyr::rename(chr=seqnames) %>% filter(sample %in% tgp.subsamps) %>% group_by(type) %>% do(freq.range(.)) %>% mutate(prop=round(prop,4)) %>% group_by(type, nb, prop) %>% summarize(kb=sum((end-start+1)/1e3))
 cumfreq.popsv.tgp = rbind(data.frame(set="PopSV", cnv.dd), data.frame(set="1000GP", tgp.dd)) %>% group_by(set, type) %>% arrange(desc(prop)) %>% mutate(prop.gen=kb/sum(kb), cumprop=cumsum(prop.gen))
 
-ggplot(cumfreq.popsv.tgp, aes(x=prop, y=cumprop,colour=type, linetype=set)) + geom_line(alpha=.9, size=2) + theme_bw() + ylim(0,1) + xlab("frequency") + ylab("cumulative proportion") + theme(legend.position=c(.99,.99),legend.justification=c(1,1)) + scale_colour_brewer(name="", palette="Set1") + scale_x_log10(breaks=c(.002,.005,.01,.02,.05,.1,.2,.5))
+cumfreq.popsv.tgp %>% filter(!is.na(type)) %>% ggplot(aes(x=prop, y=cumprop,colour=type, linetype=set)) + geom_line(alpha=.9, size=2) + theme_bw() + ylim(0,1) + xlab("frequency") + ylab("cumulative proportion") + theme(legend.position=c(.99,.99),legend.justification=c(1,1)) + scale_colour_brewer(name="", palette="Set1") + scale_x_log10(breaks=c(.002,.005,.01,.02,.05,.1,.2,.5))
 ```
 
 ## Comparison with long-read-based catalogs

@@ -204,11 +204,12 @@ cumfreq.popsv.tgp = rbind(data.frame(set = "PopSV", cnv.dd), data.frame(set = "1
     tgp.dd)) %>% group_by(set, type) %>% arrange(desc(prop)) %>% mutate(prop.gen = kb/sum(kb), 
     cumprop = cumsum(prop.gen))
 
-ggplot(cumfreq.popsv.tgp, aes(x = prop, y = cumprop, colour = type, linetype = set)) + 
-    geom_line(alpha = 0.9, size = 2) + theme_bw() + ylim(0, 1) + xlab("frequency") + 
-    ylab("cumulative proportion") + theme(legend.position = c(0.99, 0.99), legend.justification = c(1, 
-    1)) + scale_colour_brewer(name = "", palette = "Set1") + scale_x_log10(breaks = c(0.002, 
-    0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5))
+cumfreq.popsv.tgp %>% filter(!is.na(type)) %>% ggplot(aes(x = prop, y = cumprop, 
+    colour = type, linetype = set)) + geom_line(alpha = 0.9, size = 2) + theme_bw() + 
+    ylim(0, 1) + xlab("frequency") + ylab("cumulative proportion") + theme(legend.position = c(0.99, 
+    0.99), legend.justification = c(1, 1)) + scale_colour_brewer(name = "", 
+    palette = "Set1") + scale_x_log10(breaks = c(0.002, 0.005, 0.01, 0.02, 0.05, 
+    0.1, 0.2, 0.5))
 ```
 
 ![](PopSV-catalog-overview_files/figure-markdown_github/freq-1.png)
@@ -291,16 +292,16 @@ chaisson.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0442356|
-| all          | PopSV   |   0.5478336|
-| deletion     | 1000GP  |   0.1980867|
-| deletion     | PopSV   |   0.2283583|
-| duplication  | 1000GP  |  -0.2905387|
-| duplication  | PopSV   |   0.8111299|
-| low-map      | 1000GP  |  -0.0015105|
-| low-map      | PopSV   |   0.7166357|
-| ext. low-map | 1000GP  |  -0.1971681|
-| ext. low-map | PopSV   |   0.0231800|
+| all          | 1000GP  |   0.0501773|
+| all          | PopSV   |   0.5473347|
+| deletion     | 1000GP  |   0.2044217|
+| deletion     | PopSV   |   0.2254512|
+| duplication  | 1000GP  |  -0.2842049|
+| duplication  | PopSV   |   0.8118134|
+| low-map      | 1000GP  |  -0.0052839|
+| low-map      | PopSV   |   0.7208925|
+| ext. low-map | 1000GP  |  -0.1574896|
+| ext. low-map | PopSV   |   0.0428174|
 
 ### Pendleton et al
 
@@ -341,16 +342,16 @@ pend.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0578390|
-| all          | PopSV   |   0.5944038|
-| deletion     | 1000GP  |   0.2189456|
-| deletion     | PopSV   |   0.2803774|
-| duplication  | 1000GP  |  -0.3480136|
-| duplication  | PopSV   |   0.8564898|
-| low-map      | 1000GP  |   0.0991162|
-| low-map      | PopSV   |   0.9905412|
-| ext. low-map | 1000GP  |   0.3364722|
-| ext. low-map | PopSV   |   0.7923829|
+| all          | 1000GP  |   0.0509233|
+| all          | PopSV   |   0.5859097|
+| deletion     | 1000GP  |   0.2091368|
+| deletion     | PopSV   |   0.2884370|
+| duplication  | 1000GP  |  -0.3567204|
+| duplication  | PopSV   |   0.8399120|
+| low-map      | 1000GP  |   0.0998471|
+| low-map      | PopSV   |   0.9587520|
+| ext. low-map | 1000GP  |   0.3263347|
+| ext. low-map | PopSV   |   0.7635417|
 
 Novel CNV regions
 -----------------
