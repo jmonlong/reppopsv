@@ -141,11 +141,19 @@ table.novel %>% kable
 ```{r tablenovelomim}
 table.novel.omim = rep.cnv.novel %>% group_by(set) %>% do(countGenes(., subset(exons, gene_name %in% omim$hgnc_symbol), subset(exon.proms, gene_name %in% omim$hgnc_symbol), subset(gene.proms, gene_name %in% omim$hgnc_symbol)))
 table.novel.omim %>% kable
+
+novel.lm.gr = cnv.df %>% filter(novel, lowmap.prop>.9) %>% makeGRangesFromDataFrame %>% reduce
+exons.omim.gr = subset(exons, gene_name %in% omim$hgnc_symbol)
+ol = findOverlaps(novel.lm.gr, exons.omim.gr) %>% as.data.frame %>% mutate(gene=exons.omim.gr$gene_name[subjectHits]) %>% group_by(queryHits) %>% summarize(gene=paste(unique(sort(gene)), collapse=', '))
+novel.lm.omim = novel.lm.gr[ol$queryHits] %>% as.data.frame %>% select(seqnames, start, end)
+novel.lm.omim$gene = ol$gene
+
+novel.lm.omim %>% arrange(seqnames, start) %>% mutate(region=paste0(seqnames, ':', start, '-', end)) %>% select(region, gene) %>% kable
 ```
 
 ## Saturation curves
 
-```{r saturation}
+```{r saturation, cache=TRUE}
 saturationCurve <- function(df, feat.gr, nb.subsamp=10){
   samples = unique(df$sample)
   samp.bks = seq(1,length(samples),length.out=10)
@@ -168,5 +176,5 @@ ggplot(sc.geneproms, aes(x=nbsamp, y=gene.med, colour=project)) + geom_pointrang
 
 
 ```{r paperout, echo=FALSE}
-save(sc.exons, sc.exproms, sc.geneproms, table.df, table.omim, table.novel, table.novel.omim, file='PopSV-functionalImpact.RData')
+save(sc.exons, sc.exproms, sc.geneproms, table.df, table.omim, table.novel, table.novel.omim, novel.lm.omim, file='PopSV-functionalImpact.RData')
 ```
