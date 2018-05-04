@@ -35,7 +35,9 @@ files.todownload = c('rmsk.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/h
                      'gap.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/gap.txt.gz', 
                      'simpleRepeat.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/simpleRepeat.txt.gz',
                      'genomicSuperDups.txt.gz', 'http://hgdownload.soe.ucsc.edu/goldenPath/hg19/database/genomicSuperDups.txt.gz', 
-                     'ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/integrated_sv_map/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 
+                     'ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'http://ftp.1000genomes.ebi.ac.uk/vol1/ftp/phase3/integrated_sv_map/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz',
+                     '1000G_phase1_cnv_genotypes_phased_25Jul2014.genotypes.vcf.gz', 'http://www.broadinstitute.org/~handsake/mcnv_data/bulk/1000G_phase1_cnv_genotypes_phased_25Jul2014.genotypes.vcf.gz',
+                     '20161013_GoNL_AF_genotyped_SVs.vcf.gz', 'https://molgenis26.target.rug.nl/downloads/gonl_public/variants/release6.1/20161013_GoNL_AF_genotyped_SVs.vcf.gz',
                      'chaisson_STR_expansions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/STR_expansions.bed', 
                      'chaisson_insertions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/insertions.bed', 
                      'chaisson_inversions.bed', 'http://eichlerlab.gs.washington.edu/publications/chm1-structural-variation/data/GRCh37/inversions.bed', 
@@ -118,13 +120,56 @@ segdup %>% as.data.frame %>% head %>% kable
 
 ## 1000 Genomes Project - CNV catalog
 
-```{r tkgp, cache=TRUE}
-tgp = readVcf('../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'hg19')
-tgp.df = cbind(tgp %>% info %>% as.data.frame %>% mutate(type=SVTYPE, end=END) %>% dplyr::select(type, end), rowRanges(tgp) %>% as.data.frame %>% mutate(ALT=unlist(lapply(ALT, paste, collapse=';'))) %>% dplyr::select(seqnames, start, ALT), geno(tgp)$GT %>% as.data.frame)
-rownames(tgp.df) = NULL
-nb.samps = ncol(geno(tgp)$GT)
-tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% filter(seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% gather(sample, geno, 6:ncol(tgp.df)) %>% filter(geno!='0|0', geno!='.', geno!='0') %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+```{r tkgp}
+tgp.vcf = readVcf('../data/ALL.wgs.mergedSV.v8.20130502.svs.genotypes.vcf.gz', 'hg19')
+```
 
+```{r, cache=TRUE}
+tgp.df = rowRanges(tgp.vcf) %>% as.data.frame %>% mutate(ALT=unlist(lapply(ALT, paste, collapse=';'))) %>% dplyr::select(seqnames, start, ALT)
+tgp.df$type = info(tgp.vcf)$SVTYPE
+tgp.df$end = info(tgp.vcf)$END
+tgp.df$af = unlist(lapply(info(tgp.vcf)$AF, sum))
+tgp.df = cbind(tgp.df, geno(tgp.vcf)$GT %>% as.data.frame)
+rownames(tgp.df) = NULL
+nb.samps = ncol(geno(tgp.vcf)$GT)
+tgp.df = tgp.df %>% mutate(type=ifelse(grepl('DEL', type), 'DEL', type)) %>% filter(seqnames!='X', type %in% c("CNV","DEL","DUP")) %>% gather(sample, geno, -seqnames, -start, -end, -type, -af, -ALT) %>% filter(geno!='0|0', geno!='.', geno!='0') %>% group_by(seqnames, start, end) %>% mutate(prop=n()/nb.samps, svsize=end-start)
+```
+
+The catalog is reformatted to have one row per sample/variant.
+We save the coordinates and SV type information.
+
+To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*.
+
+### Allele frequency vs sample proportion
+
+The 1000 Genomes Project provides both the allele frequencies and the genotype for each sample.
+We can compare the allele frequency estimate with the proportion of samples with a mutated allele.
+Assuming Hardy-Weinberg equilibrium, we expect (1-(1-AF)^2) of the samples to have a mutated allele.
+
+```{r}
+hw.exp = data.frame(af=seq(0,1,.01))
+hw.exp$prop = 1 - (1-hw.exp$af)*(1-hw.exp$af)
+tgp.freq = tgp.df %>% group_by(seqnames, start, end, type, af) %>% summarize(prop=n()/nb.samps)
+
+ggplot(tgp.freq, aes(x=af, y=prop)) + geom_point(aes(colour=seqnames %in% 1:22), alpha=.5) + geom_line(data=hw.exp, linetype=1)  + geom_line(aes(y=1.1*prop), data=hw.exp, linetype=2) + facet_wrap(~type) + theme_bw() + scale_colour_hue(name="autosome") + xlab("allele frequency") + ylab("proportion of samples")
+tgp.freq$prop.exp = 1 - (1-tgp.freq$af)*(1-tgp.freq$af)
+```
+
+Most of the variants follow the HW expectation (plain line).
+Many of the ones that deviates from HW affect **more samples than expected**.
+This is not so surprising, these variants were most likely depleted in homozygous variant by selective pressure.
+The few variants that affect less samples than expected are on chromosomes X and Y.
+
+In practice, if we estimate the proportion of samples from the allele frequency we will **under-estimate** it. Here for example, it would be under-estimated for `r round(100*mean(tgp.freq$prop.exp<tgp.freq$prop),1)`% of the variants. Instead we could use a slightly **skewed HW expectation** (dotted line). Then, the under-estimation would only affect  `r round(100*mean(1.1*tgp.freq$prop.exp<tgp.freq$prop),1)`% of the variants.
+Although we use the genotypes for this dataset, this conservative approximation will be used for the GoNL catalog which only provides allele frequencies (see below).
+
+### Copy number estimates
+
+For variants with *SVTYPE=CNV*, we compute the copy number from the genotype and (if different from 2) assign *DEL*/*DUP* for each sample.
+The copy-number information is saved in column *CN*.
+To compare with PopSV we removed variants in chromosome X.
+
+```{r, cache=TRUE}
 genoToCN <- function(df){
   alt = df$ALT[1]
   if(alt %in% c('A','T','G','C')){
@@ -149,13 +194,58 @@ save(tgp, file='../data/tgp-CNV-noX-noCNV.RData')
 tgp %>% as.data.frame %>% head %>% kable
 ```
 
-The catalog is reformatted to have one row per sample/variant.
-We save the coordinates and SV type information.
+## GenomeSTRiP CNV catalogs
 
-To focus on CNV we kept the following *SVTYPE*s: *DEL*, *DUP* and *CNV*.
-For variants with *SVTYPE=CNV*, we compute the copy number from the genotype and (if different from 2) assign *DEL*/*DUP* for each sample.
-The copy-number information is saved in column *CN*.
-To compare with PopSV we removed variants in chromosome X.
+CNVs from Chiang et al are available from the GTEx data portal which requires to login (free).
+Hence the [GTEx_Analysis_2016-10-24_WholeGenomeSeq_147Indiv_SV_sites.vcf.gz](https://www.gtexportal.org/home/datasets) file (data release v6) should be **downloaded manually** and placed in the `data` folder.
+
+```{r genomestrip}
+hand = readVcf('../data/1000G_phase1_cnv_genotypes_phased_25Jul2014.genotypes.vcf.gz')
+als = lapply(rowRanges(hand)$ALT, function(alts){
+  alts = as.numeric(gsub('<CN','',gsub('>','',alts)))
+  if(any(alts == 1)){
+    alts = c(2, alts)
+  } else {
+    alts = c(1, alts)
+  }
+  alts
+})
+geno.l = strsplit(geno(hand)$GT, '\\|')
+geno.l = lapply(geno.l, function(x) as.numeric(x)+1)
+ij = rep(1:nrow(geno(hand)$GT), ncol(geno(hand)$GT))
+cn.l = lapply(1:length(geno.l), function(ii) sum(als[[ij[ii]]][geno.l[[ii]]]))
+hand.cn = matrix(unlist(cn.l), nrow=nrow(geno(hand)$GT))
+colnames(hand.cn) = colnames(geno(hand)$GT)
+hand.cn = rowRanges(hand) %>% as.data.frame(row.names=NULL) %>% dplyr::select(seqnames, start) %>% cbind(hand.cn)
+hand.cn$end = info(hand)$END
+hand.cn %<>% dplyr::rename(chr=seqnames)
+gs.hand = gather(hand.cn, sample, cn, -chr, -start, -end)
+gs.hand = gs.hand %>% group_by(chr, start, end, cn) %>% mutate(n=n()) %>% group_by(chr, start, end) %>% mutate(cn.major=cn[which.max(n)], type=ifelse(cn<cn.major, 'DEL','DUP'), prop.samp=mean(cn!=cn.major)) %>% filter(cn != cn.major) %>% dplyr::select(-n) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+gs.hand %>% as.data.frame %>% head %>% kable
+
+gtex = readVcf('../data/GTEx_Analysis_2016-10-24_WholeGenomeSeq_147Indiv_SV_sites.vcf.gz')
+gtex.df = rowRanges(gtex) %>% as.data.frame(row.names=NULL) %>% dplyr::select(seqnames, start, ALT, FILTER)
+gtex.df = info(gtex) %>% as.data.frame %>% dplyr::select(END, GSCNQUAL, NSAMP) %>% cbind(gtex.df,.)
+gs.chiang = gtex.df %>% filter(!is.na(GSCNQUAL))
+gs.chiang %>% as.data.frame %>% head %>% kable
+
+save(gs.hand, gs.chiang, file='../data/GenomeSTRiP-CNVcatalogs-Handsaker2016-Chiang2018.RData')
+```
+
+## GoNL
+
+```{r}
+gonl = readVcf("../data/20161013_GoNL_AF_genotyped_SVs.vcf.gz")
+gonl.cnv = cbind(rowRanges(gonl) %>% as.data.frame(row.names=NULL) %>% dplyr::select(seqnames, start), info(gonl) %>% as.data.frame %>% dplyr::select(SVTYPE, SVLEN)) %>% mutate(end=start+abs(SVLEN)) %>% dplyr::rename(type=SVTYPE)
+gonl.cnv$af = unlist(lapply(info(gonl)$AF, sum))
+gonl.cnv %<>% filter(type!="TRA", type!='INS:ME', ) %>% mutate(prop=1.1*(1-(1-af)*(1-af)), prop=ifelse(prop>1,1,prop)) %>% dplyr::select(seqnames, start, end, prop, type) %>% makeGRangesFromDataFrame(keep.extra.columns=TRUE)
+gonl.cnv %>% as.data.frame %>% head %>% kable
+
+save(gonl.cnv, file='../data/GoNL-CNVs.RData')
+```
+
+GoNL calls are downloaded from [20161013_GoNL_AF_genotyped_SVs.vcf.gz](https://molgenis26.target.rug.nl/downloads/gonl_public/variants/release6.1/20161013_GoNL_AF_genotyped_SVs.vcf.gz). Only the allele frequencies of the variants are provided so we estimated the proportion of samples with an mutated allele using a conservative Hardy-Weinberg formula (see above).
+
 
 ## PacBio (Chaisson et al) SV catalog
 

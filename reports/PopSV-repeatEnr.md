@@ -128,13 +128,13 @@ dc.df %>% group_by(region, project) %>% summarize(centelgap.1Mb = mean(distance 
 | region   | project    |  centelgap.1Mb|
 |:---------|:-----------|--------------:|
 | CNV      | Twins      |          0.335|
-| expected | Twins      |          0.113|
-| CNV      | CageKid    |          0.334|
-| expected | CageKid    |          0.112|
-| CNV      | GoNL       |          0.321|
+| expected | Twins      |          0.109|
+| CNV      | CageKid    |          0.324|
+| expected | CageKid    |          0.108|
+| CNV      | GoNL       |          0.324|
 | expected | GoNL       |          0.118|
-| CNV      | CK somatic |          0.106|
-| expected | CK somatic |          0.106|
+| CNV      | CK somatic |          0.114|
+| expected | CK somatic |          0.105|
 
 Low-mappability and repeat classes
 ----------------------------------
@@ -184,7 +184,7 @@ covrepclass.grl$te = te.gr
 ### Enrichment
 
 ``` r
-regionChar <- function(reg.df, genfeat.grl, null.gr, nb.cores = 1) {
+regionChar <- function(reg.df, genfeat.grl, null.gr) {
     reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
     rcF <- function(gf.n, reg.gr, null.gr) {
         rc.df = rbind(data.frame(set = "CNV", sample = reg.gr$sample, ol = overlapsAny(reg.gr, 
@@ -198,11 +198,11 @@ regionChar <- function(reg.df, genfeat.grl, null.gr, nb.cores = 1) {
         lr.df %>% filter(term == "cnvTRUE") %>% select(sample, estimate, p.value) %>% 
             merge(fc.df)
     }
-    rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores = nb.cores)
+    rc.enr = lapply(names(genfeat.grl), rcF, reg.gr, null.gr)
     rc.enr = do.call(rbind, rc.enr)
 }
 
-covclass.enr = regionChar(cnv.df, covrepclass.grl, rand.centelD.gr, nb.cores = NB.CORES)
+covclass.enr = regionChar(cnv.df, covrepclass.grl, rand.centelD.gr)
 covclass.enr = merge(covclass.enr, projects.df)
 covclass.enr.s = covclass.enr %>% group_by(project, feature) %>% summarize(estimate = median(estimate, 
     na.rm = TRUE), p.value = median(p.value, na.rm = TRUE), prop.ratio = median(prop.ratio, 
@@ -238,42 +238,42 @@ covclass.enr.s %>% mutate(p.value = as.character(signif(p.value, 3))) %>% kable(
 
 | project    | feature  |  estimate| p.value   |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:---------|---------:|:----------|-----------:|------------:|----------:|
-| Twins      | exon     |    -0.705| 4.2e-10   |       0.538|        0.082|      0.152|
-| Twins      | expected |    -2.624| 1.06e-169 |       0.414|        0.372|      0.890|
-| Twins      | gene     |    -0.589| 1.06e-15  |       0.692|        0.311|      0.448|
-| Twins      | high     |     0.742| 0.0101    |       2.000|        0.023|      0.011|
-| Twins      | low      |     2.454| 4.56e-168 |       4.718|        0.651|      0.138|
-| Twins      | sat      |     0.972| 1.1e-05   |       2.516|        0.049|      0.018|
-| Twins      | segdup   |     1.700| 1.24e-74  |       3.569|        0.420|      0.118|
-| Twins      | str      |     0.315| 8.21e-06  |       1.205|        0.454|      0.378|
-| Twins      | te       |     0.014| 0.519     |       1.002|        0.845|      0.846|
-| CageKid    | exon     |    -0.588| 1.63e-08  |       0.594|        0.082|      0.141|
-| CageKid    | expected |    -2.608| 1.36e-211 |       0.403|        0.359|      0.886|
-| CageKid    | gene     |    -0.548| 1.07e-16  |       0.711|        0.319|      0.449|
-| CageKid    | high     |     0.890| 0.000902  |       2.333|        0.024|      0.010|
-| CageKid    | low      |     2.450| 1.72e-206 |       4.639|        0.656|      0.138|
-| CageKid    | sat      |     0.887| 1.05e-05  |       2.333|        0.041|      0.017|
-| CageKid    | segdup   |     1.673| 1.05e-89  |       3.457|        0.418|      0.119|
-| CageKid    | str      |     0.265| 7.16e-05  |       1.182|        0.403|      0.342|
-| CageKid    | te       |    -0.086| 0.177     |       0.985|        0.819|      0.829|
-| GoNL       | exon     |    -0.634| 0.000101  |       0.600|        0.131|      0.224|
-| GoNL       | expected |    -2.542| 2.38e-52  |       0.469|        0.422|      0.898|
-| GoNL       | gene     |    -0.612| 6.91e-07  |       0.688|        0.318|      0.459|
-| GoNL       | high     |     1.723| 5e-04     |       4.600|        0.051|      0.011|
-| GoNL       | low      |     2.146| 2.45e-50  |       3.909|        0.622|      0.162|
-| GoNL       | sat      |     1.206| 0.000178  |       3.000|        0.069|      0.024|
-| GoNL       | segdup   |     1.629| 2.46e-24  |       3.422|        0.402|      0.119|
-| GoNL       | str      |     0.107| 0.387     |       1.041|        0.615|      0.590|
-| GoNL       | te       |    -0.244| 0.334     |       0.986|        0.936|      0.950|
-| CK somatic | exon     |     0.052| 0.0949    |       1.038|        0.232|      0.201|
-| CK somatic | expected |    -0.989| 3.1e-17   |       0.913|        0.854|      0.938|
-| CK somatic | gene     |    -0.002| 0.123     |       0.999|        0.492|      0.487|
-| CK somatic | high     |    -0.135| 0.236     |       0.889|        0.009|      0.008|
-| CK somatic | low      |     0.369| 1.87e-16  |       1.316|        0.205|      0.144|
-| CK somatic | sat      |     0.041| 0.0844    |       1.040|        0.019|      0.017|
-| CK somatic | segdup   |     0.393| 2.29e-09  |       1.382|        0.179|      0.094|
-| CK somatic | str      |     0.088| 0.0105    |       1.053|        0.480|      0.419|
-| CK somatic | te       |    -0.262| 0.00705   |       0.966|        0.840|      0.864|
+| Twins      | exon     |    -0.673| 4.44e-09  |       0.552|        0.082|      0.148|
+| Twins      | expected |    -2.680| 8.16e-172 |       0.413|        0.372|      0.896|
+| Twins      | gene     |    -0.596| 3.2e-16   |       0.690|        0.311|      0.451|
+| Twins      | high     |     0.886| 0.00649   |       2.316|        0.023|      0.010|
+| Twins      | low      |     2.496| 1.79e-170 |       4.908|        0.651|      0.133|
+| Twins      | sat      |     1.061| 1.81e-06  |       2.741|        0.049|      0.018|
+| Twins      | segdup   |     1.721| 6.44e-76  |       3.675|        0.420|      0.114|
+| Twins      | str      |     0.305| 1.49e-05  |       1.195|        0.454|      0.377|
+| Twins      | te       |    -0.032| 0.582     |       0.995|        0.845|      0.845|
+| CageKid    | exon     |    -0.551| 1.6e-07   |       0.615|        0.084|      0.136|
+| CageKid    | expected |    -2.650| 8.72e-212 |       0.409|        0.361|      0.892|
+| CageKid    | gene     |    -0.535| 5.97e-17  |       0.718|        0.321|      0.446|
+| CageKid    | high     |     0.885| 0.00128   |       2.333|        0.022|      0.010|
+| CageKid    | low      |     2.473| 5.79e-205 |       4.884|        0.652|      0.131|
+| CageKid    | sat      |     0.970| 1.68e-06  |       2.528|        0.042|      0.016|
+| CageKid    | segdup   |     1.685| 1.87e-93  |       3.558|        0.411|      0.114|
+| CageKid    | str      |     0.259| 7.19e-05  |       1.176|        0.403|      0.340|
+| CageKid    | te       |    -0.080| 0.285     |       0.985|        0.820|      0.832|
+| GoNL       | exon     |    -0.649| 7.31e-05  |       0.589|        0.134|      0.227|
+| GoNL       | expected |    -2.537| 3.02e-51  |       0.467|        0.419|      0.901|
+| GoNL       | gene     |    -0.618| 1.16e-06  |       0.683|        0.321|      0.461|
+| GoNL       | high     |     1.659| 0.000772  |       4.400|        0.051|      0.012|
+| GoNL       | low      |     2.188| 3.71e-49  |       3.869|        0.629|      0.162|
+| GoNL       | sat      |     1.327| 0.000175  |       3.333|        0.070|      0.020|
+| GoNL       | segdup   |     1.588| 3.92e-25  |       3.315|        0.406|      0.120|
+| GoNL       | str      |     0.061| 0.475     |       1.024|        0.614|      0.594|
+| GoNL       | te       |    -0.344| 0.173     |       0.980|        0.934|      0.950|
+| CK somatic | exon     |     0.124| 0.1       |       1.093|        0.183|      0.179|
+| CK somatic | expected |    -1.006| 4.52e-16  |       0.914|        0.870|      0.940|
+| CK somatic | gene     |     0.008| 0.0942    |       1.005|        0.484|      0.485|
+| CK somatic | high     |     0.088| 0.232     |       1.083|        0.009|      0.008|
+| CK somatic | low      |     0.412| 2.12e-16  |       1.436|        0.195|      0.123|
+| CK somatic | sat      |     0.135| 0.197     |       1.125|        0.021|      0.016|
+| CK somatic | segdup   |     0.479| 2.73e-10  |       1.477|        0.146|      0.089|
+| CK somatic | str      |     0.122| 0.0104    |       1.047|        0.410|      0.383|
+| CK somatic | te       |    -0.273| 0.00736   |       0.964|        0.810|      0.851|
 
 Controlling for the SD enrichment
 ---------------------------------
@@ -287,7 +287,7 @@ rand.sd.germ.gr = subset(rand.sd.gr, sample %in% germ.samps)
 ```
 
 ``` r
-regionCharNoSD <- function(reg.df, genfeat.grl, null.gr, nb.cores = 1) {
+regionCharNoSD <- function(reg.df, genfeat.grl, null.gr) {
     reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
     rcF <- function(gf.n, reg.gr, null.gr) {
         rc.df = rbind(data.frame(set = "CNV", sample = reg.gr$sample, ol = overlapsAny(reg.gr, 
@@ -302,11 +302,11 @@ regionCharNoSD <- function(reg.df, genfeat.grl, null.gr, nb.cores = 1) {
         lr.df %>% filter(term == "cnvTRUE") %>% select(sample, estimate, p.value) %>% 
             merge(fc.df)
     }
-    rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores = nb.cores)
+    rc.enr = lapply(names(genfeat.grl), rcF, reg.gr, null.gr)
     rc.enr = do.call(rbind, rc.enr)
 }
 
-covclass.enr.nosd = regionCharNoSD(cnv.df, covrepclass.grl, rand.sd.gr, nb.cores = NB.CORES)
+covclass.enr.nosd = regionCharNoSD(cnv.df, covrepclass.grl, rand.sd.gr)
 covclass.enr.nosd = merge(covclass.enr.nosd, projects.df)
 covclass.enr.nosd.s = covclass.enr.nosd %>% group_by(project, feature) %>% summarize(estimate = median(estimate, 
     na.rm = TRUE), p.value = median(p.value, na.rm = TRUE), prop.ratio = median(prop.ratio, 
@@ -344,42 +344,42 @@ covclass.enr.nosd.s %>% mutate(p.value = as.character(signif(p.value, 3))) %>%
 
 | project    | feature  |  estimate| p.value   |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:---------|---------:|:----------|-----------:|------------:|----------:|
-| Twins      | exon     |    -0.665| 1.74e-08  |       0.575|        0.082|      0.145|
-| Twins      | expected |    -1.623| 2.04e-90  |       0.500|        0.372|      0.739|
-| Twins      | gene     |    -0.357| 7.94e-07  |       0.789|        0.311|      0.396|
-| Twins      | high     |     0.142| 0.399     |       1.250|        0.023|      0.018|
-| Twins      | low      |     1.542| 5.3e-84   |       2.196|        0.651|      0.298|
-| Twins      | sat      |     0.928| 1.81e-05  |       2.406|        0.049|      0.020|
-| Twins      | segdup   |    -0.125| 0.0782    |       1.041|        0.420|      0.404|
-| Twins      | str      |     0.313| 8.25e-06  |       1.195|        0.454|      0.377|
-| Twins      | te       |    -0.009| 0.572     |       0.998|        0.845|      0.849|
-| CageKid    | exon     |    -0.523| 2.98e-07  |       0.637|        0.082|      0.131|
-| CageKid    | expected |    -1.605| 2.61e-109 |       0.495|        0.359|      0.728|
-| CageKid    | gene     |    -0.322| 2.08e-06  |       0.800|        0.319|      0.396|
-| CageKid    | high     |     0.141| 0.307     |       1.195|        0.024|      0.018|
-| CageKid    | low      |     1.515| 5.43e-102 |       2.158|        0.656|      0.298|
-| CageKid    | sat      |     0.821| 3.49e-05  |       2.170|        0.041|      0.019|
-| CageKid    | segdup   |    -0.056| 0.0619    |       1.046|        0.418|      0.398|
-| CageKid    | str      |     0.251| 0.000165  |       1.169|        0.403|      0.345|
-| CageKid    | te       |    -0.133| 0.11      |       0.976|        0.819|      0.834|
-| GoNL       | exon     |    -0.645| 0.00017   |       0.600|        0.131|      0.217|
-| GoNL       | expected |    -1.606| 1e-29     |       0.552|        0.422|      0.772|
-| GoNL       | gene     |    -0.450| 0.000454  |       0.751|        0.318|      0.420|
-| GoNL       | high     |     0.977| 0.00681   |       2.615|        0.051|      0.020|
-| GoNL       | low      |     1.395| 2.47e-25  |       2.071|        0.622|      0.302|
-| GoNL       | sat      |     1.085| 0.00125   |       2.688|        0.069|      0.027|
-| GoNL       | segdup   |    -0.190| 0.124     |       1.013|        0.402|      0.397|
-| GoNL       | str      |     0.066| 0.429     |       1.037|        0.615|      0.590|
-| GoNL       | te       |    -0.422| 0.104     |       0.977|        0.936|      0.958|
-| CK somatic | exon     |     0.015| 0.0671    |       1.040|        0.232|      0.198|
-| CK somatic | expected |    -0.386| 0.000453  |       0.930|        0.854|      0.920|
-| CK somatic | gene     |     0.038| 0.0913    |       1.019|        0.492|      0.483|
-| CK somatic | high     |    -0.053| 0.173     |       0.957|        0.009|      0.010|
-| CK somatic | low      |    -0.057| 0.0103    |       1.200|        0.205|      0.178|
-| CK somatic | sat      |    -0.105| 0.334     |       1.063|        0.019|      0.017|
-| CK somatic | segdup   |    -0.350| 5.96e-08  |       1.027|        0.179|      0.169|
-| CK somatic | str      |     0.072| 0.0501    |       1.054|        0.480|      0.432|
-| CK somatic | te       |    -0.258| 0.00854   |       0.969|        0.840|      0.869|
+| Twins      | exon     |    -0.640| 1.9e-08   |       0.591|        0.082|      0.140|
+| Twins      | expected |    -1.529| 7.32e-82  |       0.511|        0.372|      0.725|
+| Twins      | gene     |    -0.324| 1.18e-05  |       0.798|        0.311|      0.390|
+| Twins      | high     |     0.186| 0.28      |       1.250|        0.023|      0.019|
+| Twins      | low      |     1.464| 3.27e-74  |       2.109|        0.651|      0.311|
+| Twins      | sat      |     0.918| 8.91e-06  |       2.405|        0.049|      0.020|
+| Twins      | segdup   |    -0.375| 1.47e-05  |       1.000|        0.420|      0.420|
+| Twins      | str      |     0.288| 4.1e-05   |       1.194|        0.454|      0.380|
+| Twins      | te       |    -0.005| 0.53      |       0.995|        0.845|      0.850|
+| CageKid    | exon     |    -0.531| 5.93e-07  |       0.640|        0.084|      0.130|
+| CageKid    | expected |    -1.590| 1.09e-103 |       0.504|        0.361|      0.725|
+| CageKid    | gene     |    -0.314| 2.91e-06  |       0.811|        0.321|      0.395|
+| CageKid    | high     |     0.274| 0.157     |       1.341|        0.022|      0.017|
+| CageKid    | low      |     1.479| 1.19e-95  |       2.148|        0.652|      0.300|
+| CageKid    | sat      |     0.823| 4.13e-05  |       2.167|        0.042|      0.019|
+| CageKid    | segdup   |    -0.185| 0.0112    |       1.000|        0.411|      0.411|
+| CageKid    | str      |     0.276| 3.21e-05  |       1.187|        0.403|      0.339|
+| CageKid    | te       |    -0.078| 0.314     |       0.985|        0.820|      0.832|
+| GoNL       | exon     |    -0.666| 5.37e-05  |       0.602|        0.134|      0.220|
+| GoNL       | expected |    -1.531| 1.81e-27  |       0.549|        0.419|      0.761|
+| GoNL       | gene     |    -0.452| 0.000342  |       0.751|        0.321|      0.427|
+| GoNL       | high     |     1.085| 0.00644   |       2.786|        0.051|      0.018|
+| GoNL       | low      |     1.280| 3.33e-22  |       2.000|        0.629|      0.313|
+| GoNL       | sat      |     0.968| 0.00168   |       2.412|        0.070|      0.029|
+| GoNL       | segdup   |    -0.367| 0.0165    |       1.000|        0.406|      0.406|
+| GoNL       | str      |     0.069| 0.327     |       1.034|        0.614|      0.593|
+| GoNL       | te       |    -0.515| 0.0611    |       0.973|        0.934|      0.958|
+| CK somatic | exon     |     0.062| 0.0605    |       1.088|        0.183|      0.175|
+| CK somatic | expected |    -0.387| 0.000593  |       0.945|        0.870|      0.912|
+| CK somatic | gene     |     0.034| 0.111     |       1.026|        0.484|      0.473|
+| CK somatic | high     |     0.014| 0.246     |       1.091|        0.009|      0.009|
+| CK somatic | low      |    -0.064| 0.00751   |       1.154|        0.195|      0.166|
+| CK somatic | sat      |    -0.048| 0.135     |       1.204|        0.021|      0.014|
+| CK somatic | segdup   |    -0.460| 3.45e-10  |       1.000|        0.146|      0.146|
+| CK somatic | str      |     0.065| 0.0944    |       1.053|        0.410|      0.385|
+| CK somatic | te       |    -0.263| 0.00519   |       0.961|        0.810|      0.849|
 
 Satellite families
 ------------------
@@ -388,7 +388,7 @@ Satellite families
 
 ``` r
 sat.grl = split(sat.gr, sat.gr$repName)
-sat.enr.nosd = regionCharNoSD(cnv.df, sat.grl, rand.sd.gr, nb.cores = NB.CORES)
+sat.enr.nosd = regionCharNoSD(cnv.df, sat.grl, rand.sd.gr)
 sat.enr.nosd %<>% group_by(sample) %>% mutate(qv = p.adjust(p.value, method = "fdr")) %>% 
     merge(projects.df)
 ```
@@ -432,10 +432,10 @@ sat.enr.nosd %>% filter(feature %in% sat.enr.nosd.s$feature) %>% group_by(projec
 
 | project    | feature   |  estimate| p.value  |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:----------|---------:|:---------|-----------:|------------:|----------:|
-| Twins      | ALR/Alpha |     1.598| 6.34e-06 |       4.300|        0.029|      0.006|
-| CageKid    | ALR/Alpha |     1.429| 8.73e-06 |       3.818|        0.024|      0.006|
-| GoNL       | ALR/Alpha |     1.870| 0.000724 |       5.000|        0.046|      0.009|
-| CK somatic | ALR/Alpha |     0.017| 0.263    |       1.069|        0.007|      0.006|
+| Twins      | ALR/Alpha |     1.621| 2.86e-06 |       4.250|        0.029|      0.007|
+| CageKid    | ALR/Alpha |     1.391| 7.01e-06 |       3.538|        0.024|      0.007|
+| GoNL       | ALR/Alpha |     1.960| 0.000583 |       5.250|        0.048|      0.009|
+| CK somatic | ALR/Alpha |     0.037| 0.289    |       1.200|        0.008|      0.006|
 
 ### Overlap distribution
 
@@ -478,7 +478,7 @@ simprep$sequence2 = ifelse(simprep$sequence %in% head(str.ordered$sequence,
     20), simprep$sequence, "others")
 simprepl = split(simprep, simprep$sequence2)
 
-str.enr.nosd = regionCharNoSD(cnv.df, simprepl, rand.sd.gr, nb.cores = NB.CORES)
+str.enr.nosd = regionCharNoSD(cnv.df, simprepl, rand.sd.gr)
 str.enr.nosd %<>% group_by(sample) %>% mutate(qv = p.adjust(p.value, method = "fdr")) %>% 
     merge(projects.df)
 ```
@@ -522,26 +522,38 @@ str.enr.nosd %>% filter(feature %in% str.enr.nosd.s$feature) %>% group_by(projec
 
 | project    | feature |  estimate| p.value  |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:--------|---------:|:---------|-----------:|------------:|----------:|
-| Twins      | AT      |     0.320| 0.217    |       1.375|        0.021|      0.017|
-| Twins      | others  |     0.336| 5.53e-06 |       1.237|        0.401|      0.323|
-| Twins      | TA      |     0.117| 0.386    |       1.095|        0.017|      0.015|
-| Twins      | TG      |    -0.309| 0.215    |       0.760|        0.019|      0.024|
-| Twins      | TTTA    |     0.167| 0.389    |       1.176|        0.009|      0.008|
-| CageKid    | AT      |     0.417| 0.109    |       1.480|        0.019|      0.014|
-| CageKid    | others  |     0.272| 7.17e-05 |       1.202|        0.355|      0.296|
-| CageKid    | TA      |     0.441| 0.107    |       1.526|        0.019|      0.013|
-| CageKid    | TG      |    -0.153| 0.455    |       0.889|        0.018|      0.021|
-| CageKid    | TTTA    |     0.067| 0.587    |       1.118|        0.009|      0.007|
-| GoNL       | AT      |    -0.003| 0.645    |       1.000|        0.030|      0.032|
-| GoNL       | others  |     0.136| 0.206    |       1.076|        0.547|      0.512|
-| GoNL       | TA      |     0.028| 0.589    |       1.053|        0.033|      0.030|
-| GoNL       | TG      |    -0.145| 0.471    |       0.889|        0.044|      0.047|
-| GoNL       | TTTA    |    -0.196| 0.579    |       0.857|        0.015|      0.016|
-| CK somatic | AT      |    -0.055| 0.424    |       1.010|        0.060|      0.063|
-| CK somatic | others  |     0.085| 0.0337   |       1.062|        0.422|      0.375|
-| CK somatic | TA      |    -0.065| 0.14     |       1.024|        0.056|      0.059|
-| CK somatic | TG      |    -0.113| 0.283    |       0.957|        0.078|      0.082|
-| CK somatic | TTTA    |    -0.173| 0.235    |       0.945|        0.036|      0.037|
+| Twins      | AAAT    |    -0.199| 0.45     |       0.882|        0.010|      0.011|
+| Twins      | AC      |    -0.030| 0.622    |       1.024|        0.029|      0.028|
+| Twins      | AT      |     0.238| 0.29     |       1.320|        0.021|      0.017|
+| Twins      | GT      |    -0.183| 0.51     |       0.862|        0.015|      0.017|
+| Twins      | others  |     0.315| 1.69e-05 |       1.229|        0.401|      0.327|
+| Twins      | TA      |     0.092| 0.44     |       1.136|        0.017|      0.015|
+| Twins      | TG      |    -0.281| 0.234    |       0.778|        0.019|      0.025|
+| Twins      | TTTA    |     0.114| 0.478    |       1.111|        0.009|      0.008|
+| CageKid    | AAAT    |     0.011| 0.443    |       1.043|        0.008|      0.009|
+| CageKid    | AC      |    -0.225| 0.232    |       0.827|        0.020|      0.024|
+| CageKid    | AT      |     0.393| 0.139    |       1.459|        0.020|      0.013|
+| CageKid    | GT      |    -0.019| 0.668    |       1.000|        0.015|      0.015|
+| CageKid    | others  |     0.314| 7.29e-06 |       1.233|        0.356|      0.288|
+| CageKid    | TA      |     0.286| 0.246    |       1.324|        0.019|      0.013|
+| CageKid    | TG      |    -0.097| 0.515    |       0.925|        0.018|      0.020|
+| CageKid    | TTTA    |     0.088| 0.57     |       1.105|        0.009|      0.007|
+| GoNL       | AAAT    |    -0.212| 0.537    |       0.889|        0.020|      0.023|
+| GoNL       | AC      |    -0.178| 0.45     |       0.857|        0.049|      0.057|
+| GoNL       | AT      |    -0.017| 0.525    |       1.000|        0.033|      0.031|
+| GoNL       | GT      |    -0.114| 0.59     |       0.941|        0.034|      0.036|
+| GoNL       | others  |     0.124| 0.272    |       1.071|        0.549|      0.516|
+| GoNL       | TA      |     0.114| 0.437    |       1.143|        0.034|      0.029|
+| GoNL       | TG      |    -0.138| 0.475    |       0.920|        0.043|      0.047|
+| GoNL       | TTTA    |    -0.130| 0.556    |       0.889|        0.015|      0.017|
+| CK somatic | AAAT    |    -0.177| 0.176    |       0.934|        0.027|      0.030|
+| CK somatic | AC      |    -0.138| 0.168    |       0.936|        0.066|      0.071|
+| CK somatic | AT      |    -0.077| 0.269    |       1.018|        0.051|      0.054|
+| CK somatic | GT      |    -0.141| 0.149    |       0.979|        0.055|      0.055|
+| CK somatic | others  |     0.070| 0.049    |       1.078|        0.361|      0.334|
+| CK somatic | TA      |    -0.075| 0.246    |       1.000|        0.045|      0.048|
+| CK somatic | TG      |    -0.129| 0.266    |       0.942|        0.056|      0.061|
+| CK somatic | TTTA    |    -0.241| 0.135    |       0.948|        0.021|      0.026|
 
 ### Overlap distribution
 
@@ -577,7 +589,7 @@ str.ol %>% filter(str.prop > 0) %>% group_by(str.loc, set) %>% summarize(nb = n(
 ``` r
 simprep.size.grl = split(simprep, cut(width(simprep), breaks = c(0, 100, 500, 
     Inf)))
-strsize.enr.nosd = regionCharNoSD(cnv.df, simprep.size.grl, rand.sd.gr, nb.cores = NB.CORES)
+strsize.enr.nosd = regionCharNoSD(cnv.df, simprep.size.grl, rand.sd.gr)
 strsize.enr.nosd %<>% group_by(sample) %>% mutate(qv = p.adjust(p.value, method = "fdr")) %>% 
     merge(projects.df)
 
@@ -614,20 +626,20 @@ strsize.enr.nosd %>% group_by(project, feature) %>% summarize(estimate = median(
     kable(digits = 3)
 ```
 
-| project    | feature    |  estimate| p.value |  prop.ratio|  prop.region|  prop.null|
-|:-----------|:-----------|---------:|:--------|-----------:|------------:|----------:|
-| Twins      | (0,100\]   |     0.032| 0.64    |       1.029|        0.350|      0.338|
-| Twins      | (100,500\] |     0.350| 0.00137 |       1.361|        0.141|      0.102|
-| Twins      | (500,Inf\] |     1.020| 1e-13   |       2.494|        0.130|      0.051|
-| CageKid    | (0,100\]   |    -0.041| 0.421   |       0.973|        0.297|      0.303|
-| CageKid    | (100,500\] |     0.284| 0.00226 |       1.295|        0.124|      0.094|
-| CageKid    | (500,Inf\] |     1.071| 3.5e-18 |       2.645|        0.127|      0.049|
-| GoNL       | (0,100\]   |    -0.097| 0.423   |       0.960|        0.527|      0.547|
-| GoNL       | (100,500\] |     0.044| 0.587   |       1.066|        0.197|      0.182|
-| GoNL       | (500,Inf\] |     0.593| 0.00413 |       1.729|        0.136|      0.079|
-| CK somatic | (0,100\]   |    -0.066| 0.247   |       0.979|        0.388|      0.405|
-| CK somatic | (100,500\] |    -0.005| 0.0458  |       1.084|        0.200|      0.178|
-| CK somatic | (500,Inf\] |     0.260| 0.00159 |       1.352|        0.114|      0.081|
+| project    | feature   |  estimate| p.value  |  prop.ratio|  prop.region|  prop.null|
+|:-----------|:----------|---------:|:---------|-----------:|------------:|----------:|
+| Twins      | (0,100]   |     0.028| 0.536    |       1.031|        0.350|      0.339|
+| Twins      | (100,500] |     0.324| 0.00346  |       1.335|        0.141|      0.104|
+| Twins      | (500,Inf] |     1.014| 1.17e-13 |       2.527|        0.130|      0.050|
+| CageKid    | (0,100]   |    -0.017| 0.427    |       0.990|        0.297|      0.297|
+| CageKid    | (100,500] |     0.331| 0.00112  |       1.343|        0.124|      0.092|
+| CageKid    | (500,Inf] |     1.106| 2.88e-18 |       2.683|        0.124|      0.046|
+| GoNL       | (0,100]   |    -0.068| 0.551    |       0.974|        0.524|      0.542|
+| GoNL       | (100,500] |     0.029| 0.596    |       1.053|        0.194|      0.188|
+| GoNL       | (500,Inf] |     0.557| 0.00642  |       1.667|        0.132|      0.085|
+| CK somatic | (0,100]   |    -0.057| 0.261    |       0.974|        0.344|      0.357|
+| CK somatic | (100,500] |     0.005| 0.14     |       1.118|        0.157|      0.136|
+| CK somatic | (500,Inf] |     0.203| 0.00523  |       1.464|        0.114|      0.069|
 
 Transposable element
 --------------------
@@ -636,7 +648,7 @@ Transposable element
 
 ``` r
 tefam.grl = split(te.gr, te.gr$repFamily)
-tefam.enr.nosd = regionCharNoSD(cnv.df, tefam.grl, rand.sd.gr, nb.cores = NB.CORES)
+tefam.enr.nosd = regionCharNoSD(cnv.df, tefam.grl, rand.sd.gr)
 tefam.enr.nosd %<>% group_by(sample) %>% mutate(qv = p.adjust(p.value, method = "fdr")) %>% 
     merge(projects.df)
 ```
@@ -680,88 +692,92 @@ tefam.enr.nosd %>% filter(feature %in% tefam.enr.nosd.s$feature) %>% group_by(pr
 
 | project    | feature       |  estimate| p.value  |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:--------------|---------:|:---------|-----------:|------------:|----------:|
-| Twins      | Alu           |    -0.212| 0.00276  |       0.900|        0.438|      0.482|
-| Twins      | CR1           |    -0.489| 0.00726  |       0.630|        0.032|      0.051|
-| Twins      | ERV1          |     0.143| 0.15     |       1.145|        0.145|      0.126|
-| Twins      | ERVK          |     0.224| 0.261    |       1.306|        0.024|      0.019|
-| Twins      | ERVL-MaLR     |    -0.170| 0.0632   |       0.878|        0.182|      0.204|
-| Twins      | Gypsy         |    -0.363| 0.338    |       0.706|        0.007|      0.010|
-| Twins      | hAT           |    -0.058| 0.565    |       0.955|        0.014|      0.014|
-| Twins      | hAT-Blackjack |    -0.297| 0.295    |       0.750|        0.013|      0.018|
-| Twins      | hAT-Charlie   |    -0.257| 0.0106   |       0.815|        0.138|      0.170|
-| Twins      | hAT-Tip100    |    -0.083| 0.509    |       0.932|        0.024|      0.026|
-| Twins      | L1            |     0.306| 1.74e-05 |       1.168|        0.516|      0.444|
-| Twins      | L2            |    -0.237| 0.00513  |       0.833|        0.204|      0.243|
-| Twins      | MIR           |    -0.353| 1.91e-05 |       0.769|        0.218|      0.281|
-| Twins      | Other         |     1.074| 0.00235  |       2.667|        0.020|      0.007|
-| Twins      | RTE           |    -0.469| 0.137    |       0.652|        0.011|      0.017|
-| Twins      | TcMar-Mariner |    -0.252| 0.356    |       0.806|        0.014|      0.018|
-| Twins      | TcMar-Tc2     |    -0.258| 0.485    |       0.786|        0.007|      0.009|
-| Twins      | TcMar-Tigger  |    -0.225| 0.0924   |       0.822|        0.068|      0.083|
-| CageKid    | Alu           |    -0.273| 1.1e-05  |       0.863|        0.386|      0.449|
-| CageKid    | CR1           |    -0.453| 0.00996  |       0.655|        0.031|      0.044|
-| CageKid    | ERV1          |     0.144| 0.112    |       1.157|        0.132|      0.117|
-| CageKid    | ERVK          |     0.239| 0.269    |       1.275|        0.022|      0.017|
-| CageKid    | ERVL-MaLR     |    -0.147| 0.0692   |       0.886|        0.166|      0.187|
-| CageKid    | Gypsy         |    -0.478| 0.197    |       0.640|        0.006|      0.010|
-| CageKid    | hAT           |    -0.060| 0.624    |       0.952|        0.012|      0.012|
-| CageKid    | hAT-Blackjack |    -0.277| 0.275    |       0.774|        0.012|      0.017|
-| CageKid    | hAT-Charlie   |    -0.259| 0.00389  |       0.821|        0.124|      0.150|
-| CageKid    | hAT-Tip100    |    -0.148| 0.446    |       0.887|        0.021|      0.025|
-| CageKid    | L1            |     0.284| 4.77e-06 |       1.163|        0.484|      0.414|
-| CageKid    | L2            |    -0.259| 0.000779 |       0.816|        0.177|      0.219|
-| CageKid    | MIR           |    -0.347| 4.79e-06 |       0.767|        0.195|      0.256|
-| CageKid    | Other         |     1.101| 0.00106  |       2.727|        0.017|      0.006|
-| CageKid    | RTE           |    -0.554| 0.0678   |       0.593|        0.009|      0.015|
-| CageKid    | TcMar-Mariner |    -0.226| 0.339    |       0.814|        0.013|      0.015|
-| CageKid    | TcMar-Tc2     |    -0.230| 0.418    |       0.833|        0.007|      0.009|
-| CageKid    | TcMar-Tigger  |    -0.172| 0.166    |       0.869|        0.063|      0.074|
-| GoNL       | Alu           |    -0.226| 0.0741   |       0.933|        0.622|      0.673|
-| GoNL       | CR1           |    -0.415| 0.0701   |       0.696|        0.063|      0.094|
-| GoNL       | ERV1          |     0.207| 0.131    |       1.193|        0.235|      0.198|
-| GoNL       | ERVK          |     0.424| 0.195    |       1.556|        0.049|      0.032|
-| GoNL       | ERVL-MaLR     |     0.008| 0.586    |       0.995|        0.335|      0.330|
-| GoNL       | Gypsy         |    -0.247| 0.505    |       0.786|        0.016|      0.022|
-| GoNL       | hAT           |    -0.051| 0.511    |       0.955|        0.028|      0.029|
-| GoNL       | hAT-Blackjack |    -0.329| 0.326    |       0.762|        0.030|      0.038|
-| GoNL       | hAT-Charlie   |    -0.216| 0.101    |       0.856|        0.241|      0.276|
-| GoNL       | hAT-Tip100    |    -0.067| 0.584    |       0.967|        0.048|      0.050|
-| GoNL       | L1            |     0.161| 0.214    |       1.062|        0.637|      0.599|
-| GoNL       | L2            |    -0.157| 0.229    |       0.906|        0.354|      0.385|
-| GoNL       | MIR           |    -0.340| 0.00651  |       0.825|        0.367|      0.453|
-| GoNL       | Other         |     0.098| 0.651    |       1.125|        0.014|      0.012|
-| GoNL       | RTE           |    -0.503| 0.183    |       0.647|        0.020|      0.034|
-| GoNL       | TcMar-Mariner |    -0.108| 0.473    |       0.905|        0.031|      0.033|
-| GoNL       | TcMar-Tc2     |    -0.084| 0.533    |       1.000|        0.018|      0.016|
-| GoNL       | TcMar-Tigger  |    -0.004| 0.521    |       1.013|        0.140|      0.140|
-| CK somatic | Alu           |    -0.126| 0.0295   |       0.943|        0.473|      0.506|
-| CK somatic | CR1           |    -0.097| 0.269    |       0.991|        0.127|      0.125|
-| CK somatic | ERV1          |    -0.098| 0.118    |       0.983|        0.170|      0.192|
-| CK somatic | ERVK          |    -0.105| 0.304    |       1.009|        0.043|      0.044|
-| CK somatic | ERVL-MaLR     |    -0.126| 0.0527   |       0.961|        0.272|      0.286|
-| CK somatic | Gypsy         |    -0.059| 0.285    |       1.000|        0.047|      0.049|
-| CK somatic | hAT           |    -0.081| 0.205    |       1.013|        0.057|      0.053|
-| CK somatic | hAT-Blackjack |    -0.035| 0.235    |       1.005|        0.077|      0.072|
-| CK somatic | hAT-Charlie   |    -0.044| 0.0859   |       0.985|        0.238|      0.243|
-| CK somatic | hAT-Tip100    |    -0.099| 0.21     |       1.000|        0.085|      0.092|
-| CK somatic | L1            |    -0.074| 0.111    |       0.975|        0.480|      0.481|
-| CK somatic | L2            |    -0.047| 0.126    |       0.981|        0.336|      0.332|
-| CK somatic | MIR           |     0.001| 0.0634   |       0.997|        0.362|      0.376|
-| CK somatic | Other         |    -0.146| 0.109    |       1.016|        0.032|      0.030|
-| CK somatic | RTE           |    -0.085| 0.206    |       0.984|        0.064|      0.065|
-| CK somatic | TcMar-Mariner |    -0.083| 0.267    |       1.000|        0.065|      0.067|
-| CK somatic | TcMar-Tc2     |    -0.112| 0.364    |       0.966|        0.042|      0.042|
-| CK somatic | TcMar-Tigger  |    -0.116| 0.139    |       0.932|        0.145|      0.161|
+| Twins      | Alu           |    -0.228| 0.00145  |       0.894|        0.438|      0.482|
+| Twins      | CR1           |    -0.440| 0.0177   |       0.662|        0.032|      0.048|
+| Twins      | ERV1          |     0.148| 0.143    |       1.177|        0.145|      0.125|
+| Twins      | ERVK          |     0.256| 0.296    |       1.321|        0.024|      0.018|
+| Twins      | ERVL          |    -0.126| 0.278    |       0.922|        0.103|      0.113|
+| Twins      | ERVL-MaLR     |    -0.178| 0.045    |       0.874|        0.182|      0.209|
+| Twins      | Gypsy         |    -0.476| 0.227    |       0.652|        0.007|      0.011|
+| Twins      | Gypsy?        |    -0.080| 0.655    |       0.933|        0.006|      0.007|
+| Twins      | hAT-Blackjack |    -0.384| 0.17     |       0.700|        0.013|      0.019|
+| Twins      | hAT-Charlie   |    -0.272| 0.00565  |       0.815|        0.138|      0.170|
+| Twins      | hAT-Tip100    |    -0.106| 0.576    |       0.941|        0.024|      0.026|
+| Twins      | L1            |     0.310| 1.24e-05 |       1.166|        0.516|      0.441|
+| Twins      | L2            |    -0.259| 0.00213  |       0.824|        0.204|      0.244|
+| Twins      | MIR           |    -0.364| 6.78e-06 |       0.773|        0.218|      0.283|
+| Twins      | Other         |     1.231| 0.00114  |       3.000|        0.020|      0.007|
+| Twins      | RTE           |    -0.456| 0.118    |       0.667|        0.011|      0.018|
+| Twins      | TcMar-Tc2     |    -0.364| 0.367    |       0.722|        0.007|      0.009|
+| Twins      | TcMar-Tigger  |    -0.216| 0.12     |       0.836|        0.068|      0.080|
+| Twins      | TcMar?        |    -0.502| 0.455    |       0.750|        0.003|      0.004|
+| CageKid    | Alu           |    -0.289| 7.98e-06 |       0.858|        0.387|      0.449|
+| CageKid    | CR1           |    -0.395| 0.0175   |       0.702|        0.031|      0.043|
+| CageKid    | ERV1          |     0.157| 0.121    |       1.169|        0.130|      0.112|
+| CageKid    | ERVK          |     0.229| 0.346    |       1.242|        0.022|      0.017|
+| CageKid    | ERVL          |    -0.098| 0.337    |       0.940|        0.093|      0.102|
+| CageKid    | ERVL-MaLR     |    -0.163| 0.0491   |       0.884|        0.165|      0.186|
+| CageKid    | Gypsy         |    -0.575| 0.123    |       0.600|        0.006|      0.010|
+| CageKid    | Gypsy?        |    -0.148| 0.542    |       0.846|        0.005|      0.006|
+| CageKid    | hAT-Blackjack |    -0.256| 0.293    |       0.800|        0.012|      0.016|
+| CageKid    | hAT-Charlie   |    -0.241| 0.0095   |       0.819|        0.122|      0.148|
+| CageKid    | hAT-Tip100    |    -0.149| 0.46     |       0.872|        0.020|      0.023|
+| CageKid    | L1            |     0.297| 2.85e-06 |       1.169|        0.484|      0.414|
+| CageKid    | L2            |    -0.275| 0.000577 |       0.806|        0.178|      0.221|
+| CageKid    | MIR           |    -0.371| 1.54e-06 |       0.752|        0.193|      0.255|
+| CageKid    | Other         |     1.150| 0.000735 |       2.733|        0.017|      0.006|
+| CageKid    | RTE           |    -0.620| 0.0483   |       0.577|        0.009|      0.015|
+| CageKid    | TcMar-Tc2     |    -0.176| 0.5      |       0.875|        0.007|      0.009|
+| CageKid    | TcMar-Tigger  |    -0.163| 0.185    |       0.876|        0.065|      0.072|
+| CageKid    | TcMar?        |    -0.426| 0.356    |       0.692|        0.003|      0.004|
+| GoNL       | Alu           |    -0.291| 0.0277   |       0.915|        0.622|      0.682|
+| GoNL       | CR1           |    -0.397| 0.102    |       0.722|        0.066|      0.091|
+| GoNL       | ERV1          |     0.132| 0.382    |       1.144|        0.231|      0.204|
+| GoNL       | ERVK          |     0.444| 0.174    |       1.571|        0.048|      0.031|
+| GoNL       | ERVL          |    -0.031| 0.567    |       0.981|        0.188|      0.190|
+| GoNL       | ERVL-MaLR     |     0.028| 0.578    |       1.025|        0.338|      0.332|
+| GoNL       | Gypsy         |    -0.396| 0.38     |       0.714|        0.016|      0.021|
+| GoNL       | Gypsy?        |    -0.297| 0.513    |       0.800|        0.012|      0.015|
+| GoNL       | hAT-Blackjack |    -0.213| 0.511    |       0.818|        0.032|      0.038|
+| GoNL       | hAT-Charlie   |    -0.245| 0.0737   |       0.844|        0.239|      0.284|
+| GoNL       | hAT-Tip100    |    -0.183| 0.475    |       0.880|        0.046|      0.055|
+| GoNL       | L1            |     0.150| 0.224    |       1.059|        0.635|      0.599|
+| GoNL       | L2            |    -0.173| 0.162    |       0.904|        0.359|      0.400|
+| GoNL       | MIR           |    -0.327| 0.00849  |       0.838|        0.379|      0.454|
+| GoNL       | Other         |    -0.016| 0.561    |       1.000|        0.013|      0.012|
+| GoNL       | RTE           |    -0.658| 0.102    |       0.571|        0.019|      0.033|
+| GoNL       | TcMar-Tc2     |    -0.128| 0.482    |       0.929|        0.017|      0.019|
+| GoNL       | TcMar-Tigger  |    -0.079| 0.472    |       0.987|        0.141|      0.144|
+| GoNL       | TcMar?        |    -0.417| 0.492    |       0.750|        0.007|      0.009|
+| CK somatic | Alu           |    -0.156| 0.0227   |       0.936|        0.439|      0.486|
+| CK somatic | CR1           |    -0.093| 0.26     |       0.979|        0.093|      0.091|
+| CK somatic | ERV1          |    -0.103| 0.19     |       0.971|        0.140|      0.158|
+| CK somatic | ERVK          |    -0.145| 0.165    |       1.019|        0.033|      0.036|
+| CK somatic | ERVL          |    -0.115| 0.0805   |       0.961|        0.144|      0.147|
+| CK somatic | ERVL-MaLR     |    -0.145| 0.0276   |       0.930|        0.214|      0.263|
+| CK somatic | Gypsy         |    -0.152| 0.19     |       1.002|        0.039|      0.040|
+| CK somatic | Gypsy?        |    -0.175| 0.127    |       0.935|        0.032|      0.031|
+| CK somatic | hAT-Blackjack |    -0.142| 0.18     |       0.982|        0.054|      0.058|
+| CK somatic | hAT-Charlie   |    -0.053| 0.166    |       0.991|        0.209|      0.208|
+| CK somatic | hAT-Tip100    |    -0.100| 0.317    |       1.000|        0.072|      0.067|
+| CK somatic | L1            |    -0.056| 0.149    |       0.979|        0.467|      0.460|
+| CK somatic | L2            |    -0.073| 0.0956   |       0.976|        0.280|      0.286|
+| CK somatic | MIR           |    -0.081| 0.054    |       0.971|        0.308|      0.329|
+| CK somatic | Other         |    -0.175| 0.225    |       1.028|        0.021|      0.019|
+| CK somatic | RTE           |    -0.137| 0.336    |       0.957|        0.052|      0.058|
+| CK somatic | TcMar-Tc2     |    -0.139| 0.205    |       1.000|        0.032|      0.031|
+| CK somatic | TcMar-Tigger  |    -0.151| 0.143    |       0.927|        0.116|      0.129|
+| CK somatic | TcMar?        |    -0.010| 0.324    |       1.114|        0.022|      0.017|
 
 ### Sub-family enrichment
 
 ``` r
 te.ordered = te.gr %>% as.data.frame %>% group_by(repName, repFamily, repClass) %>% 
     summarize(n = n()) %>% arrange(desc(n)) %>% filter(repFamily %in% c("L1", 
-    "Other", "ERVK", "ERV1")) %>% filter(n > 500)
+    "Other", "ERVK", "ERV1", "Alu")) %>% filter(n > 500)
 te.top.gr = subset(te.gr, repName %in% te.ordered$repName)
 te.grl = split(te.top.gr, te.top.gr$repName)
-te.enr.nosd = regionCharNoSD(cnv.df, te.grl, rand.sd.gr, nb.cores = NB.CORES)
+te.enr.nosd = regionCharNoSD(cnv.df, te.grl, rand.sd.gr)
 ```
 
 ``` r
@@ -807,62 +823,82 @@ te.enr.nosd.top %>% filter(feature %in% te.enr.nosd.top.s$feature) %>% group_by(
 
 | project    | feature   |  estimate| p.value  |  prop.ratio|  prop.region|  prop.null|
 |:-----------|:----------|---------:|:---------|-----------:|------------:|----------:|
-| Twins      | HERVH-int |     1.441| 0.00194  |       3.500|        0.015|      0.004|
-| Twins      | L1HS      |     2.067| 0.000165 |       6.000|        0.018|      0.003|
-| Twins      | L1M4b     |     0.117| 0.473    |       1.100|        0.006|      0.006|
-| Twins      | L1ME1     |    -0.169| 0.443    |       0.860|        0.022|      0.026|
-| Twins      | L1ME2     |    -0.171| 0.492    |       0.857|        0.010|      0.012|
-| Twins      | L1ME4a    |    -0.229| 0.229    |       0.808|        0.028|      0.035|
-| Twins      | L1P1      |     0.658| 0.0947   |       1.818|        0.012|      0.006|
-| Twins      | L1PA2     |     1.675| 2.9e-09  |       4.538|        0.045|      0.010|
-| Twins      | L1PA3     |     1.364| 2.85e-10 |       3.481|        0.063|      0.018|
-| Twins      | L1PA4     |     0.864| 6.36e-05 |       2.188|        0.046|      0.021|
-| Twins      | L1PA5     |     0.293| 0.251    |       1.321|        0.024|      0.019|
-| Twins      | L1PB4     |     0.290| 0.41     |       1.333|        0.010|      0.008|
-| Twins      | LTR12C    |     0.600| 0.178    |       1.667|        0.009|      0.006|
-| Twins      | SVA\_F    |     1.736| 0.0243   |       3.667|        0.008|      0.002|
-| CageKid    | HERVH-int |     1.348| 0.00218  |       3.429|        0.012|      0.004|
-| CageKid    | L1HS      |     1.975| 5.26e-05 |       5.667|        0.018|      0.003|
-| CageKid    | L1M4b     |     0.410| 0.272    |       1.444|        0.008|      0.006|
-| CageKid    | L1ME1     |    -0.215| 0.323    |       0.814|        0.018|      0.023|
-| CageKid    | L1ME2     |    -0.197| 0.54     |       0.833|        0.009|      0.010|
-| CageKid    | L1ME4a    |    -0.241| 0.211    |       0.797|        0.024|      0.030|
-| CageKid    | L1P1      |     0.474| 0.197    |       1.562|        0.010|      0.006|
-| CageKid    | L1PA2     |     1.785| 1.18e-11 |       5.353|        0.047|      0.008|
-| CageKid    | L1PA3     |     1.362| 5.9e-12  |       3.571|        0.056|      0.017|
-| CageKid    | L1PA4     |     0.870| 9.74e-06 |       2.205|        0.041|      0.018|
-| CageKid    | L1PA5     |     0.197| 0.33     |       1.211|        0.021|      0.018|
-| CageKid    | L1PB4     |     0.271| 0.338    |       1.292|        0.010|      0.008|
-| CageKid    | LTR12C    |     0.623| 0.164    |       1.778|        0.008|      0.004|
-| CageKid    | SVA\_F    |     1.607| 0.013    |       4.000|        0.008|      0.002|
-| GoNL       | HERVH-int |     0.985| 0.168    |       2.000|        0.014|      0.007|
-| GoNL       | L1HS      |     0.973| 0.196    |       2.000|        0.015|      0.006|
-| GoNL       | L1M4b     |     0.363| 0.4      |       1.500|        0.016|      0.011|
-| GoNL       | L1ME1     |    -0.206| 0.418    |       0.846|        0.042|      0.045|
-| GoNL       | L1ME2     |     0.013| 0.528    |       1.000|        0.021|      0.021|
-| GoNL       | L1ME4a    |    -0.187| 0.447    |       0.852|        0.053|      0.063|
-| GoNL       | L1P1      |     0.515| 0.326    |       1.500|        0.016|      0.011|
-| GoNL       | L1PA2     |     0.602| 0.195    |       1.667|        0.025|      0.015|
-| GoNL       | L1PA3     |     0.734| 0.0275   |       1.923|        0.054|      0.029|
-| GoNL       | L1PA4     |     0.591| 0.0655   |       1.625|        0.058|      0.034|
-| GoNL       | L1PA5     |     0.289| 0.392    |       1.318|        0.036|      0.030|
-| GoNL       | L1PB4     |     0.417| 0.315    |       1.455|        0.023|      0.016|
-| GoNL       | LTR12C    |     0.850| 0.208    |       2.000|        0.019|      0.009|
-| GoNL       | SVA\_F    |     0.723| 0.734    |       1.500|        0.007|      0.004|
-| CK somatic | HERVH-int |    -0.175| 0.36     |       0.884|        0.018|      0.020|
-| CK somatic | L1HS      |    -0.280| 0.24     |       0.923|        0.017|      0.017|
-| CK somatic | L1M4b     |    -0.008| 0.49     |       1.096|        0.029|      0.027|
-| CK somatic | L1ME1     |    -0.082| 0.241    |       0.998|        0.073|      0.074|
-| CK somatic | L1ME2     |    -0.062| 0.204    |       1.003|        0.046|      0.044|
-| CK somatic | L1ME4a    |    -0.087| 0.296    |       0.975|        0.098|      0.104|
-| CK somatic | L1P1      |    -0.199| 0.168    |       0.973|        0.021|      0.029|
-| CK somatic | L1PA2     |    -0.195| 0.0917   |       0.923|        0.033|      0.037|
-| CK somatic | L1PA3     |    -0.154| 0.0794   |       0.963|        0.050|      0.054|
-| CK somatic | L1PA4     |    -0.148| 0.102    |       0.919|        0.052|      0.057|
-| CK somatic | L1PA5     |    -0.124| 0.222    |       0.923|        0.053|      0.059|
-| CK somatic | L1PB4     |    -0.119| 0.361    |       0.967|        0.036|      0.038|
-| CK somatic | LTR12C    |    -0.245| 0.197    |       0.900|        0.024|      0.027|
-| CK somatic | SVA\_F    |    -0.127| 0.415    |       1.042|        0.012|      0.011|
+| Twins      | AluJb     |    -0.134| 0.227    |       0.917|        0.112|      0.124|
+| Twins      | AluJo     |    -0.199| 0.158    |       0.860|        0.069|      0.082|
+| Twins      | AluJr     |    -0.237| 0.0728   |       0.861|        0.071|      0.084|
+| Twins      | AluSx1    |    -0.025| 0.624    |       1.005|        0.113|      0.114|
+| Twins      | AluSz     |    -0.131| 0.265    |       0.909|        0.096|      0.104|
+| Twins      | HERVH-int |     1.338| 0.00221  |       3.375|        0.015|      0.005|
+| Twins      | L1HS      |     2.041| 0.000126 |       6.000|        0.018|      0.003|
+| Twins      | L1M1      |    -0.167| 0.432    |       0.905|        0.011|      0.011|
+| Twins      | L1M4b     |    -0.008| 0.559    |       1.000|        0.006|      0.006|
+| Twins      | L1MA7     |    -0.174| 0.489    |       0.857|        0.008|      0.009|
+| Twins      | L1ME1     |    -0.148| 0.441    |       0.878|        0.022|      0.024|
+| Twins      | L1ME4a    |    -0.211| 0.293    |       0.831|        0.028|      0.035|
+| Twins      | L1PA2     |     1.757| 1.88e-09 |       4.917|        0.045|      0.009|
+| Twins      | L1PA3     |     1.356| 1.45e-10 |       3.342|        0.063|      0.018|
+| Twins      | L1PA4     |     0.930| 2.56e-05 |       2.258|        0.046|      0.020|
+| Twins      | L1PA5     |     0.283| 0.258    |       1.300|        0.024|      0.019|
+| Twins      | LTR12C    |     0.736| 0.128    |       2.000|        0.009|      0.005|
+| Twins      | SVA\_D    |     1.053| 0.0522   |       2.429|        0.009|      0.004|
+| Twins      | SVA\_F    |     1.729| 0.0281   |       4.000|        0.008|      0.002|
+| CageKid    | AluJb     |    -0.153| 0.133    |       0.882|        0.095|      0.107|
+| CageKid    | AluJo     |    -0.168| 0.193    |       0.864|        0.059|      0.070|
+| CageKid    | AluJr     |    -0.205| 0.105    |       0.839|        0.064|      0.074|
+| CageKid    | AluSx1    |    -0.178| 0.0961   |       0.861|        0.089|      0.101|
+| CageKid    | AluSz     |    -0.121| 0.262    |       0.913|        0.083|      0.090|
+| CageKid    | HERVH-int |     1.285| 0.00201  |       3.250|        0.012|      0.004|
+| CageKid    | L1HS      |     2.208| 3.15e-05 |       7.000|        0.018|      0.003|
+| CageKid    | L1M1      |    -0.104| 0.608    |       0.944|        0.009|      0.009|
+| CageKid    | L1M4b     |     0.409| 0.341    |       1.500|        0.008|      0.005|
+| CageKid    | L1MA7     |    -0.206| 0.509    |       0.842|        0.007|      0.009|
+| CageKid    | L1ME1     |    -0.261| 0.272    |       0.786|        0.018|      0.023|
+| CageKid    | L1ME4a    |    -0.332| 0.0924   |       0.727|        0.022|      0.031|
+| CageKid    | L1PA2     |     1.961| 3.89e-12 |       5.765|        0.049|      0.008|
+| CageKid    | L1PA3     |     1.472| 3.23e-12 |       3.786|        0.060|      0.016|
+| CageKid    | L1PA4     |     0.862| 1.28e-05 |       2.244|        0.041|      0.019|
+| CageKid    | L1PA5     |     0.253| 0.272    |       1.286|        0.021|      0.016|
+| CageKid    | LTR12C    |     0.699| 0.124    |       1.857|        0.008|      0.004|
+| CageKid    | SVA\_D    |     0.782| 0.0832   |       1.900|        0.006|      0.003|
+| CageKid    | SVA\_F    |     1.552| 0.00918  |       3.800|        0.007|      0.002|
+| GoNL       | AluJb     |    -0.179| 0.25     |       0.904|        0.183|      0.210|
+| GoNL       | AluJo     |    -0.278| 0.11     |       0.802|        0.114|      0.144|
+| GoNL       | AluJr     |    -0.253| 0.151    |       0.822|        0.123|      0.149|
+| GoNL       | AluSx1    |    -0.182| 0.224    |       0.879|        0.181|      0.202|
+| GoNL       | AluSz     |    -0.134| 0.365    |       0.938|        0.169|      0.179|
+| GoNL       | HERVH-int |     0.984| 0.176    |       2.200|        0.014|      0.006|
+| GoNL       | L1HS      |     1.122| 0.177    |       2.333|        0.015|      0.006|
+| GoNL       | L1M1      |     0.017| 0.608    |       1.091|        0.023|      0.019|
+| GoNL       | L1M4b     |     0.656| 0.255    |       1.800|        0.018|      0.010|
+| GoNL       | L1MA7     |    -0.129| 0.546    |       1.000|        0.017|      0.017|
+| GoNL       | L1ME1     |    -0.167| 0.43     |       0.917|        0.042|      0.044|
+| GoNL       | L1ME4a    |    -0.232| 0.384    |       0.825|        0.054|      0.067|
+| GoNL       | L1PA2     |     0.705| 0.162    |       1.833|        0.027|      0.015|
+| GoNL       | L1PA3     |     0.620| 0.044    |       1.737|        0.057|      0.032|
+| GoNL       | L1PA4     |     0.578| 0.0559   |       1.680|        0.058|      0.034|
+| GoNL       | L1PA5     |     0.160| 0.538    |       1.167|        0.037|      0.032|
+| GoNL       | LTR12C    |     0.654| 0.179    |       1.857|        0.019|      0.010|
+| GoNL       | SVA\_D    |    -0.044| 0.669    |       1.000|        0.006|      0.006|
+| GoNL       | SVA\_F    |     0.372| 0.766    |       1.500|        0.006|      0.004|
+| CK somatic | AluJb     |    -0.041| 0.13     |       0.982|        0.147|      0.159|
+| CK somatic | AluJo     |    -0.093| 0.0848   |       0.972|        0.110|      0.114|
+| CK somatic | AluJr     |    -0.072| 0.138    |       0.973|        0.114|      0.121|
+| CK somatic | AluSx1    |    -0.060| 0.104    |       0.995|        0.142|      0.145|
+| CK somatic | AluSz     |    -0.098| 0.0456   |       0.978|        0.135|      0.137|
+| CK somatic | HERVH-int |    -0.204| 0.358    |       1.000|        0.014|      0.014|
+| CK somatic | L1HS      |    -0.343| 0.204    |       0.935|        0.014|      0.014|
+| CK somatic | L1M1      |    -0.219| 0.251    |       0.922|        0.026|      0.025|
+| CK somatic | L1M4b     |    -0.004| 0.434    |       1.104|        0.021|      0.018|
+| CK somatic | L1MA7     |    -0.255| 0.284    |       0.951|        0.027|      0.032|
+| CK somatic | L1ME1     |    -0.158| 0.208    |       0.986|        0.058|      0.065|
+| CK somatic | L1ME4a    |    -0.097| 0.2      |       0.970|        0.070|      0.074|
+| CK somatic | L1PA2     |    -0.182| 0.048    |       0.961|        0.025|      0.026|
+| CK somatic | L1PA3     |    -0.228| 0.031    |       0.937|        0.044|      0.047|
+| CK somatic | L1PA4     |    -0.219| 0.0603   |       0.910|        0.045|      0.047|
+| CK somatic | L1PA5     |    -0.190| 0.15     |       0.918|        0.038|      0.048|
+| CK somatic | LTR12C    |    -0.255| 0.24     |       0.889|        0.017|      0.020|
+| CK somatic | SVA\_D    |    -0.210| 0.283    |       1.038|        0.011|      0.012|
+| CK somatic | SVA\_F    |    -0.031| 0.381    |       1.111|        0.009|      0.008|
 
 ### Overlap distribution
 

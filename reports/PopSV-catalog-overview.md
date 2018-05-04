@@ -214,6 +214,77 @@ cumfreq.popsv.tgp %>% filter(!is.na(type)) %>% ggplot(aes(x = prop, y = cumprop,
 
 ![](PopSV-catalog-overview_files/figure-markdown_github/freq-1.png)
 
+CNV catalogs from GenomeSTRiP
+-----------------------------
+
+``` r
+load("../data/GenomeSTRiP-CNVcatalogs-Handsaker2016-Chiang2018.RData")
+
+gs.hand$extlowmap.prop = olProp(gs.hand, extlowmap.gr)
+gs.hand$extlowmap = gs.hand$extlowmap.prop >= 0.9
+
+chiang.tot.samp = 148
+gs.chiang.samp = lapply(1:chiang.tot.samp, function(ii) {
+    var = runif(nrow(gs.chiang))
+    res = gs.chiang[which(var < gs.chiang$NSAMP/chiang.tot.samp), ]
+    res$sample = paste0("s", ii)
+    res
+})
+gs.chiang.samp = do.call(rbind, gs.chiang.samp)
+gs.chiang.samp = makeGRangesFromDataFrame(gs.chiang.samp, keep.extra.columns = TRUE)
+gs.chiang.samp$extlowmap.prop = olProp(gs.chiang.samp, extlowmap.gr)
+gs.chiang.samp$extlowmap = gs.chiang.samp$extlowmap.prop >= 0.9
+
+sum.gs.df = rbind(gs.hand %>% as.data.frame %>% compAllNumbers %>% mutate(project = "GenomeSTRiP (Handsaker 2016)", 
+    type = "all"), gs.hand %>% as.data.frame %>% filter(type == "DEL") %>% compAllNumbers %>% 
+    mutate(project = "GenomeSTRiP (Handsaker 2016)", type = "DEL"), gs.hand %>% 
+    as.data.frame %>% filter(type == "DUP") %>% compAllNumbers %>% mutate(project = "GenomeSTRiP (Handsaker 2016)", 
+    type = "DUP"), gs.chiang.samp %>% as.data.frame %>% compAllNumbers %>% mutate(project = "GenomeSTRiP (Chiang 2018)", 
+    type = "all"))
+
+sum.gs.df %>% dplyr::select(project, type, everything()) %>% kable(digits = 2)
+```
+
+| project                      | type |  sample|  nb.calls|  nb.calls.samp|  nb.lm.samp|  mean.size.kb|  prop.less3kb|  nb.less3kb.samp|  gen.mb|  gen.mb.min|  gen.mb.samp|  gen.mb.max|
+|:-----------------------------|:-----|-------:|---------:|--------------:|-----------:|-------------:|-------------:|----------------:|-------:|-----------:|------------:|-----------:|
+| GenomeSTRiP (Handsaker 2016) | all  |     847|      8657|         212.03|        1.88|         27.80|          0.00|             0.00|  196.57|        3.44|         5.89|        8.46|
+| GenomeSTRiP (Handsaker 2016) | DEL  |     847|      5961|         145.78|        0.56|         21.64|          0.00|             0.00|  108.03|        1.62|         3.15|        5.54|
+| GenomeSTRiP (Handsaker 2016) | DUP  |     847|      3469|          66.26|        1.32|         41.35|          0.00|             0.00|  118.28|        0.85|         2.74|        5.20|
+| GenomeSTRiP (Chiang 2018)    | all  |     148|      7940|         826.32|        9.20|          6.14|          0.42|           349.11|   59.43|        4.18|         5.07|        9.09|
+
+CNV catalog from GoNL
+---------------------
+
+``` r
+load("../data/GoNL-CNVs.RData")
+gonl.cnv = subset(gonl.cnv, width(gonl.cnv) > 300 & prop < 0.8)
+
+gonl.tot.samp = 750
+gonl.samp = lapply(1:gonl.tot.samp, function(ii) {
+    var = runif(length(gonl.cnv))
+    res = gonl.cnv[which(var < gonl.cnv$prop)]
+    res$sample = paste0("s", ii)
+    res
+})
+gonl.samp = do.call(c, gonl.samp)
+gonl.samp$extlowmap.prop = olProp(gonl.samp, extlowmap.gr)
+gonl.samp$extlowmap = gonl.samp$extlowmap.prop >= 0.9
+
+sum.gonl.df = rbind(gonl.samp %>% as.data.frame %>% compAllNumbers %>% mutate(project = "GoNL", 
+    type = "all"), gonl.samp %>% as.data.frame %>% filter(type == "DEL") %>% 
+    compAllNumbers %>% mutate(project = "GoNL", type = "DEL"), gonl.samp %>% 
+    as.data.frame %>% filter(type == "DUP") %>% compAllNumbers %>% mutate(project = "GoNL", 
+    type = "DUP"))
+
+sum.gonl.df %>% dplyr::select(project, type, everything()) %>% kable(digits = 2)
+```
+
+| project | type |  sample|  nb.calls|  nb.calls.samp|  nb.lm.samp|  mean.size.kb|  prop.less3kb|  nb.less3kb.samp|  gen.mb|  gen.mb.min|  gen.mb.samp|  gen.mb.max|
+|:--------|:-----|-------:|---------:|--------------:|-----------:|-------------:|-------------:|----------------:|-------:|-----------:|------------:|-----------:|
+| GoNL    | all  |     750|      9545|        1047.37|        0.61|          2.93|          0.81|           843.85|   63.56|        2.35|         3.07|        4.37|
+| GoNL    | DEL  |     750|      8974|        1012.84|        0.61|          2.36|          0.82|           832.91|   34.45|        1.91|         2.39|        2.90|
+| GoNL    | DUP  |     750|       515|          20.99|        0.00|         29.43|          0.15|             3.19|   29.23|        0.11|         0.62|        1.79|
+
 Comparison with long-read-based catalogs
 ----------------------------------------
 
@@ -261,13 +332,13 @@ testOlLR <- function(gr, feat.grl, cat.list) {
         })
         do.call(rbind, res)
     })
-    var.ol = do.call(rbind, var.ol)
+    do.call(rbind, var.ol)
 }
 
 load("../data/centelgap.RData")
-chaisson.enr.df = mclapply(1:50, function(ii) {
+chaisson.enr.df = lapply(1:50, function(ii) {
     testOlLR(sv.chaisson.gr, list(ctg = centelgap), cat.l)
-}, mc.cores = NB.CORES)
+})
 chaisson.enr.df = do.call(rbind, chaisson.enr.df)
 chaisson.enr.df %<>% mutate(region = factor(set, levels = c("all", "loss", "gain", 
     "lm", "elm"), label = c("all", "deletion", "duplication", "low-map", "ext. low-map")))
@@ -292,16 +363,16 @@ chaisson.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0501773|
-| all          | PopSV   |   0.5473347|
-| deletion     | 1000GP  |   0.2044217|
-| deletion     | PopSV   |   0.2254512|
-| duplication  | 1000GP  |  -0.2842049|
-| duplication  | PopSV   |   0.8118134|
-| low-map      | 1000GP  |  -0.0052839|
-| low-map      | PopSV   |   0.7208925|
+| all          | 1000GP  |   0.0490543|
+| all          | PopSV   |   0.5533390|
+| deletion     | 1000GP  |   0.2025550|
+| deletion     | PopSV   |   0.2341978|
+| duplication  | 1000GP  |  -0.2834591|
+| duplication  | PopSV   |   0.8186714|
+| low-map      | 1000GP  |  -0.0030204|
+| low-map      | PopSV   |   0.7298795|
 | ext. low-map | 1000GP  |  -0.1574896|
-| ext. low-map | PopSV   |   0.0428174|
+| ext. low-map | PopSV   |   0.0587449|
 
 ### Pendleton et al
 
@@ -316,9 +387,9 @@ colnames(pend.sv) = c("chr", "start", "type", "filter", "info", "gt")
 pend.sv %<>% mutate(chr = gsub("chr", "", chr), end = as.numeric(gsub(".*;END=([^;]*);.*", 
     "\\1", info))) %>% makeGRangesFromDataFrame
 
-pend.enr.df = mclapply(1:50, function(ii) {
+pend.enr.df = lapply(1:50, function(ii) {
     testOlLR(pend.sv, list(ctg = centelgap), cat.l)
-}, mc.cores = NB.CORES)
+})
 pend.enr.df = do.call(rbind, pend.enr.df)
 pend.enr.df %<>% mutate(region = factor(set, levels = c("all", "loss", "gain", 
     "lm", "elm"), label = c("all", "deletion", "duplication", "low-map", "ext. low-map")))
@@ -342,16 +413,16 @@ pend.enr.s %>% kable
 
 | region       | catalog |    estimate|
 |:-------------|:--------|-----------:|
-| all          | 1000GP  |   0.0509233|
-| all          | PopSV   |   0.5859097|
-| deletion     | 1000GP  |   0.2091368|
-| deletion     | PopSV   |   0.2884370|
-| duplication  | 1000GP  |  -0.3567204|
-| duplication  | PopSV   |   0.8399120|
-| low-map      | 1000GP  |   0.0998471|
-| low-map      | PopSV   |   0.9587520|
-| ext. low-map | 1000GP  |   0.3263347|
-| ext. low-map | PopSV   |   0.7635417|
+| all          | 1000GP  |   0.0529943|
+| all          | PopSV   |   0.5898988|
+| deletion     | 1000GP  |   0.2099124|
+| deletion     | PopSV   |   0.2840336|
+| duplication  | 1000GP  |  -0.3469243|
+| duplication  | PopSV   |   0.8513615|
+| low-map      | 1000GP  |   0.1013096|
+| low-map      | PopSV   |   0.9912317|
+| ext. low-map | 1000GP  |   0.3161972|
+| ext. low-map | PopSV   |   0.7826792|
 
 Novel CNV regions
 -----------------
@@ -408,6 +479,45 @@ novel.reg %>% as.data.frame %>% summarize(region = n(), lowmap = mean(lowmap),
 |  region|  lowmap|  extlowmap|
 |-------:|-------:|----------:|
 |    3455|   0.813|      0.184|
+
+### Novel regions in other CNV catalogs
+
+``` r
+ol = findOverlaps(novel.reg, gs.hand) %>% as.data.frame %>% mutate(prop.samp = gs.hand$prop.samp[subjectHits]) %>% 
+    group_by(queryHits) %>% summarize(prop.samp = max(prop.samp))
+novel.reg$max.freq.gs.hand = 0
+novel.reg$max.freq.gs.hand[ol$queryHits] = ol$prop.samp
+
+ol = findOverlaps(novel.reg, gs.chiang.samp) %>% as.data.frame %>% mutate(NSAMP = gs.chiang.samp$NSAMP[subjectHits]) %>% 
+    group_by(queryHits) %>% summarize(NSAMP = max(NSAMP))
+novel.reg$max.freq.gs.chiang = 0
+novel.reg$max.freq.gs.chiang[ol$queryHits] = ol$NSAMP/chiang.tot.samp
+
+ol = findOverlaps(novel.reg, gonl.cnv) %>% as.data.frame %>% mutate(prop.samp = gonl.cnv$prop[subjectHits]) %>% 
+    group_by(queryHits) %>% summarize(prop.samp = max(prop.samp))
+novel.reg$max.freq.gonl = 0
+novel.reg$max.freq.gonl[ol$queryHits] = ol$prop.samp
+
+novel.reg %>% as.data.frame %>% select(seqnames, start, end, max.freq.gs.chiang, 
+    max.freq.gs.hand, max.freq.gonl) %>% gather(catalog, prop.samp, 4:6) %>% 
+    ggplot(aes(prop.samp, colour = catalog)) + stat_ecdf() + theme_bw() + xlab("proportion of sample with an overlapping CNV") + 
+    ylab("cumulative proportion of novel CNV regions") + scale_colour_brewer(name = "other CNV catalogs", 
+    labels = c("GoNL", "Chiang 2018", "Handsaker 2016"), palette = "Set2") + 
+    theme(legend.position = c(0.99, 0.01), legend.justification = c(1, 0)) + 
+    scale_y_continuous(breaks = seq(0, 1, 0.1))
+```
+
+![](PopSV-catalog-overview_files/figure-markdown_github/novelgs-1.png)
+
+``` r
+novel.reg %>% as.data.frame %>% summarize(in.gs.handsaker = mean(max.freq.gs.hand > 
+    0), in.gs.chiang = mean(max.freq.gs.chiang > 0), in.gonl = mean(max.freq.gonl > 
+    0)) %>% kable
+```
+
+|  in.gs.handsaker|  in.gs.chiang|    in.gonl|
+|----------------:|-------------:|----------:|
+|        0.1513748|     0.1128799|  0.0787265|
 
 Frequency distribution in novel or low-mappability regions
 ----------------------------------------------------------

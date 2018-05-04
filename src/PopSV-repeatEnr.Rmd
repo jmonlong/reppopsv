@@ -70,7 +70,7 @@ cnv.germ %<>% filter(sample %in% subsamps)
 
 ## Distance to centromere/telomere/gap
 
-```{r centel}
+```{r centel, cache=TRUE}
 load('../data/centelgap.RData')
 rand.gr = draw.controls(cnv.df, list(centel=centelgap), redo.duplicates=TRUE, nb.cores=NB.CORES)
 dc.df = rbind(
@@ -129,8 +129,8 @@ covrepclass.grl$te = te.gr
 
 ### Enrichment
 
-```{r covrepenr}
-regionChar <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
+```{r covrepenr, cache=TRUE}
+regionChar <- function(reg.df, genfeat.grl, null.gr){
   reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
   rcF <- function(gf.n,reg.gr, null.gr){
     rc.df = rbind(data.frame(set="CNV", sample=reg.gr$sample, ol=overlapsAny(reg.gr, genfeat.grl[[gf.n]])),
@@ -139,11 +139,11 @@ regionChar <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
     lr.df = rc.df %>% group_by(sample) %>% mutate(cnv=set=='CNV') %>% do(glm(ol~cnv, data=., family=binomial()) %>% tidy)
     lr.df %>% filter(term=='cnvTRUE') %>% select(sample, estimate, p.value) %>% merge(fc.df)
   }  
-  rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores=nb.cores)
+  rc.enr = lapply(names(genfeat.grl), rcF, reg.gr, null.gr)
   rc.enr = do.call(rbind, rc.enr)
 }
 
-covclass.enr = regionChar(cnv.df, covrepclass.grl, rand.centelD.gr, nb.cores=NB.CORES)
+covclass.enr = regionChar(cnv.df, covrepclass.grl, rand.centelD.gr)
 covclass.enr = merge(covclass.enr, projects.df)
 covclass.enr.s = covclass.enr %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE))
 ```
@@ -169,8 +169,8 @@ rand.sd.gr = draw.controls(cnv.df, null.sd.grl, redo.duplicates=TRUE, nb.cores=N
 rand.sd.germ.gr = subset(rand.sd.gr, sample %in% germ.samps)
 ```
 
-```{r nosdenr}
-regionCharNoSD <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
+```{r nosdenr, cache=TRUE}
+regionCharNoSD <- function(reg.df, genfeat.grl, null.gr){
   reg.gr = makeGRangesFromDataFrame(reg.df, keep.extra.columns = TRUE)
   rcF <- function(gf.n,reg.gr, null.gr){
     rc.df = rbind(data.frame(set="CNV", sample=reg.gr$sample, ol=overlapsAny(reg.gr, genfeat.grl[[gf.n]]), sd=overlapsAny(reg.gr, segdup)),
@@ -179,11 +179,11 @@ regionCharNoSD <- function(reg.df, genfeat.grl, null.gr, nb.cores=1){
     lr.df = rc.df %>% group_by(sample) %>% mutate(cnv=set=='CNV') %>% do(glm(ol~cnv+sd, data=., family=binomial()) %>% tidy)
     lr.df %>% filter(term=='cnvTRUE') %>% select(sample, estimate, p.value) %>% merge(fc.df)
   }  
-  rc.enr = mclapply(names(genfeat.grl), rcF, reg.gr, null.gr, mc.cores=nb.cores)
+  rc.enr = lapply(names(genfeat.grl), rcF, reg.gr, null.gr)
   rc.enr = do.call(rbind, rc.enr)
 }
 
-covclass.enr.nosd = regionCharNoSD(cnv.df, covrepclass.grl, rand.sd.gr, nb.cores=NB.CORES)
+covclass.enr.nosd = regionCharNoSD(cnv.df, covrepclass.grl, rand.sd.gr)
 covclass.enr.nosd = merge(covclass.enr.nosd, projects.df)
 covclass.enr.nosd.s = covclass.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), p.value=median(p.value, na.rm=TRUE), prop.ratio=median(prop.ratio, na.rm=TRUE), prop.region=median(CNV, na.rm=TRUE), prop.null=median(control, na.rm=TRUE))
 ```
@@ -201,9 +201,9 @@ covclass.enr.nosd.s %>% mutate(p.value=as.character(signif(p.value,3))) %>% kabl
 
 ### Enrichment
 
-```{r sat}
+```{r sat, cache=TRUE}
 sat.grl = split(sat.gr, sat.gr$repName)
-sat.enr.nosd = regionCharNoSD(cnv.df, sat.grl, rand.sd.gr, nb.cores=NB.CORES)
+sat.enr.nosd = regionCharNoSD(cnv.df, sat.grl, rand.sd.gr)
 sat.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
 ```
 
@@ -238,12 +238,12 @@ sat.ol %>% filter(sat.prop>0) %>% group_by(sat.loc,set) %>% summarize(nb=n()) %>
 
 ### Enrichment
 
-```{r str}
+```{r str, cache=TRUE}
 str.ordered = simprep %>% as.data.frame %>% group_by(sequence) %>% summarize(n=n()) %>% arrange(desc(n))
 simprep$sequence2 = ifelse(simprep$sequence %in% head(str.ordered$sequence,20), simprep$sequence, 'others')
 simprepl = split(simprep, simprep$sequence2)
 
-str.enr.nosd = regionCharNoSD(cnv.df, simprepl, rand.sd.gr, nb.cores=NB.CORES)
+str.enr.nosd = regionCharNoSD(cnv.df, simprepl, rand.sd.gr)
 str.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
 ```
 
@@ -276,9 +276,9 @@ str.ol %>% filter(str.prop>0) %>% group_by(str.loc,set) %>% summarize(nb=n()) %>
 
 ### Size of the STRs overlapped
 
-```{r strsize}
+```{r strsize, cache=TRUE}
 simprep.size.grl = split(simprep, cut(width(simprep), breaks=c(0,100,500,Inf)))
-strsize.enr.nosd = regionCharNoSD(cnv.df, simprep.size.grl, rand.sd.gr, nb.cores=NB.CORES)
+strsize.enr.nosd = regionCharNoSD(cnv.df, simprep.size.grl, rand.sd.gr)
 strsize.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
 
 strsize.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(estimate, na.rm=TRUE), qv=mean(qv<.05)) %>% ggplot(aes(x=reorder(feature, estimate, median), fill=project, y=estimate)) + geom_bar(color='black', position='dodge', stat='identity') + theme_bw() + theme(axis.text.x=element_text(angle=45, hjust=1)) + xlab("feature") + ylab("logistic regression estimate (log odd ratio)") + geom_text(aes(size=qv), label='*', position=position_dodge(.9), vjust=0, show_guide=FALSE) + scale_size_continuous(name='proportion\nsignificant\nsamples', range=c(0,10))
@@ -291,9 +291,9 @@ strsize.enr.nosd %>% group_by(project, feature) %>% summarize(estimate=median(es
 
 ### Family enrichment
 
-```{r tefam}
+```{r tefam, cache=TRUE}
 tefam.grl = split(te.gr, te.gr$repFamily)
-tefam.enr.nosd = regionCharNoSD(cnv.df, tefam.grl, rand.sd.gr, nb.cores=NB.CORES)
+tefam.enr.nosd = regionCharNoSD(cnv.df, tefam.grl, rand.sd.gr)
 tefam.enr.nosd %<>% group_by(sample) %>% mutate(qv=p.adjust(p.value, method='fdr')) %>% merge(projects.df)
 ```
 
@@ -307,11 +307,11 @@ tefam.enr.nosd %>% filter(feature %in% tefam.enr.nosd.s$feature) %>% group_by(pr
 
 ### Sub-family enrichment
 
-```{r te}
-te.ordered = te.gr %>% as.data.frame %>% group_by(repName, repFamily, repClass) %>% summarize(n=n()) %>% arrange(desc(n)) %>% filter(repFamily %in% c("L1", 'Other', 'ERVK', 'ERV1')) %>% filter(n>500)
+```{r te, cache=TRUE}
+te.ordered = te.gr %>% as.data.frame %>% group_by(repName, repFamily, repClass) %>% summarize(n=n()) %>% arrange(desc(n)) %>% filter(repFamily %in% c("L1", 'Other', 'ERVK', 'ERV1', 'Alu')) %>% filter(n>500)
 te.top.gr = subset(te.gr, repName %in% te.ordered$repName)
 te.grl = split(te.top.gr, te.top.gr$repName)
-te.enr.nosd = regionCharNoSD(cnv.df, te.grl, rand.sd.gr, nb.cores=NB.CORES)
+te.enr.nosd = regionCharNoSD(cnv.df, te.grl, rand.sd.gr)
 ```
 
 ```{r tetop}
