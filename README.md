@@ -6,7 +6,7 @@ If you just want the CNV catalog, find them in the [FigShare repository](https:/
 
 To rerun the analysis, follow these steps:
 
-# Step 1: Download the relevant data
+### Step 1: Download the relevant data
 
 The necessary data has been deposited on [FigShare](https://figshare.com/s/8fd3007ebb0fbad09b6d). Depending on the analysis, you might not need to download all the data.
 Still, the easiest way is to download all the data and unzip it in the `data` folder.
@@ -14,17 +14,17 @@ Still, the easiest way is to download all the data and unzip it in the `data` fo
 ```sh
 mkdir -p data
 cd data
-wget https://ndownloader.figshare.com/articles/2007630?private_link=8fd3007ebb0fbad09b6d -o figshare.zip
-unzip figshare
+wget https://ndownloader.figshare.com/articles/2007630?private_link=8fd3007ebb0fbad09b6d -O figshare.zip
+unzip figshare.zip
 tar -xzvf PopSV-NA12878-lowmap.tar.gz
 ```
 
-# Step 2: Install R dependencies
+### Step 2: Install R dependencies
 
 Many different packages are used throughout the analysis. The commands to install them are written in the `installDependencies.R`. 
 To install all the necessary packages open R and run `source("installDependencies.R")`.
 
-# Step 3: Compile the R-markdown reports
+### Step 3: Compile the R-markdown reports
 
 The raw R-markdown reports are located in the `src` folder. To recompile them simply run:
 
@@ -43,6 +43,6 @@ sh compileAll.sh
 
 You can already see the reports produced by these scripts in the `reports` folder.
 
-# Notes
+### Notes
 
 The code was tested on fresh dockerized Ubuntu with [R 3.3.1](https://github.com/jmonlong/myDockerfiles/blob/reppopsv/R.3.3.1/Dockerfile). Windows is not recommended as it doesn't support the `parallel` package.
